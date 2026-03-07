@@ -114,3 +114,30 @@ defmodule TestAppWeb.CommentDetailJSON do
     }
   end
 end
+
+defmodule TestAppWeb.PostSummaryJSON do
+  alias TestApp.Post
+
+  def show(%{post: post}) do
+    %{data: %{id: post.id, title: post.title, published: post.published}}
+  end
+end
+
+defmodule TestAppWeb.PostMetaJSON do
+  alias TestApp.Post
+
+  def show(%{post: post}) do
+    %{
+      data: %{
+        author: %{
+          name: post.author.name,
+          email: post.author.email
+        },
+        stats: %{
+          views: post.view_count,
+          comments: post.comments
+        }
+      }
+    }
+  end
+end

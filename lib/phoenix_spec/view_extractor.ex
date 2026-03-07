@@ -139,9 +139,76 @@ defmodule PhoenixSpec.ViewExtractor do
         {schema, fields}
 
       nil ->
-        {nil, []}
+        extract_from_alternative_function(functions, aliases, optional_fields, spec_types)
     end
   end
+
+  defp extract_from_alternative_function(functions, aliases, optional_fields, spec_types) do
+    with nil <- extract_from_named_function(functions, aliases, optional_fields, spec_types),
+         nil <- extract_from_action_inline(functions, aliases, optional_fields, spec_types) do
+      {nil, []}
+    end
+  end
+
+  defp extract_from_named_function(functions, aliases, optional_fields, spec_types) do
+    extraction_fn =
+      functions
+      |> Enum.find(fn
+        {:defp, name, _, _} when name not in [:data] ->
+          true
+
+        _ ->
+          false
+      end)
+
+    case extraction_fn do
+      {_, _name, args, body} ->
+        schema =
+          extract_schema_from_args(args, aliases) || infer_schema_from_aliases(aliases)
+
+        fields = extract_fields_from_body(body, schema, aliases, optional_fields, spec_types)
+
+        if fields != [] do
+          {schema, fields}
+        end
+
+      nil ->
+        nil
+    end
+  end
+
+  defp extract_from_action_inline(functions, aliases, optional_fields, spec_types) do
+    action_fn =
+      Enum.find(functions, fn
+        {:def, name, _, _} when name in [:show, :create] -> true
+        _ -> false
+      end)
+
+    with {:def, _, _, body} <- action_fn,
+         {:%{}, _, pairs} <- unwrap_action_to_inner_map(body) do
+      schema = infer_schema_from_aliases(aliases)
+
+      fields =
+        Enum.map(pairs, fn {key, value} ->
+          build_field(key, value, schema, aliases, optional_fields, spec_types)
+        end)
+
+      if fields != [], do: {schema, fields}
+    else
+      _ -> nil
+    end
+  end
+
+  defp unwrap_action_to_inner_map(do: body), do: unwrap_action_to_inner_map(body)
+
+  defp unwrap_action_to_inner_map({:%{}, _, [{_wrapper_key, inner}]}) do
+    case inner do
+      {:%{}, _, _pairs} = map -> map
+      _ -> nil
+    end
+  end
+
+  defp unwrap_action_to_inner_map(_), do: nil
 
   defp infer_schema_from_aliases(aliases) do
     ecto_schemas =
@@ -222,6 +289,10 @@ defmodule PhoenixSpec.ViewExtractor do
       {:list_ref, ref_name} ->
         %Field{name: key, type: %{type: "array"}, items_ref: ref_name, required: required}
 
+      {:inline_object, properties} ->
+        type = %{type: "object", properties: properties}
+        %Field{name: key, type: type, required: required}
+
       :unknown ->
         type = resolve_spec_type(key, spec_types)
         %Field{name: key, type: type, required: required}
@@ -298,6 +369,22 @@ defmodule PhoenixSpec.ViewExtractor do
     classify_value(inner, schema, aliases)
   end
 
+  # Detect inline map literals: `%{key1: expr1, key2: expr2}`
+  defp classify_value({:%{}, _, pairs}, schema, aliases) when is_list(pairs) do
+    properties =
+      Map.new(pairs, fn {key, value} ->
+        type =
+          case classify_value(value, schema, aliases) do
+            {:schema_field, _field, type} when type != %{} -> type
+            _ -> %{}
+          end
+
+        {key, type}
+      end)
+
+    {:inline_object, properties}
+  end
+
   defp classify_value(_, _schema, _aliases), do: :unknown
 
   defp resolve_module([single], aliases) when is_atom(single) do
@@ -366,6 +453,9 @@ defmodule PhoenixSpec.ViewExtractor do
   defp analyze_action_body(_), do: %{wrapper_key: nil, list: false, ref: nil}
 
   defp list_expression?({:for, _, _}), do: true
+
+  defp list_expression?({{:., _, [{:__aliases__, _, [:Enum]}, :map]}, _, _}), do: true
+
   defp list_expression?(_), do: false
 
   @doc """

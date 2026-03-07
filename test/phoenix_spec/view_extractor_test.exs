@@ -145,4 +145,31 @@ defmodule PhoenixSpec.ViewExtractorTest do
     assert field_map[:id].type == %{type: "integer"}
     assert field_map[:body].type == %{type: "string"}
   end
+
+  test "extracts fields from inline map in show action (no data/1)" do
+    info = ViewExtractor.extract(TestAppWeb.PostSummaryJSON)
+
+    assert info.schema == TestApp.Post
+    field_map = Map.new(info.fields, &{&1.name, &1})
+    assert field_map[:id].type == %{type: "integer"}
+    assert field_map[:title].type == %{type: "string"}
+    assert field_map[:published].type == %{type: "boolean"}
+  end
+
+  test "detects inline map literals as object type" do
+    info = ViewExtractor.extract(TestAppWeb.PostMetaJSON)
+
+    field_map = Map.new(info.fields, &{&1.name, &1})
+    assert field_map[:author].type.type == "object"
+    assert field_map[:author].type.properties.name == %{type: "string"}
+    assert field_map[:author].type.properties.email == %{type: "string"}
+  end
+
+  test "nested inline objects resolve schema field types" do
+    info = ViewExtractor.extract(TestAppWeb.PostMetaJSON)
+
+    field_map = Map.new(info.fields, &{&1.name, &1})
+    assert field_map[:stats].type.type == "object"
+    assert field_map[:stats].type.properties.views == %{type: "integer"}
+  end
 end
