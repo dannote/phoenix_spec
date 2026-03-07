@@ -67,11 +67,25 @@ defmodule PhoenixSpec.ParamsExtractor do
     param_keys = extract_param_keys_from_args(args) ++ extract_param_keys_from_body(body)
     {schema, cast_fields} = extract_changeset_info(body, aliases)
 
+    {schema, cast_fields} =
+      if cast_fields == [] and schema != nil do
+        {schema, extract_cast_from_schema_changeset(schema)}
+      else
+        {schema, cast_fields}
+      end
+
     fields =
       cond do
-        cast_fields != [] -> resolve_fields_from_schema(schema, cast_fields)
-        param_keys != [] -> Enum.uniq_by(param_keys, & &1.name)
-        true -> []
+        cast_fields != [] ->
+          wrapper = find_wrapper_key(param_keys)
+          wrapped_fields = resolve_fields_from_schema(schema, cast_fields)
+          if wrapper, do: wrap_fields(wrapper, wrapped_fields), else: wrapped_fields
+
+        param_keys != [] ->
+          Enum.uniq_by(param_keys, & &1.name)
+
+        true ->
+          []
       end
 
     %ParamsInfo{
@@ -158,6 +172,50 @@ defmodule PhoenixSpec.ParamsExtractor do
       end)
 
     Enum.reverse(keys)
+  end
+
+  defp extract_cast_from_schema_changeset(schema) do
+    if SchemaResolver.ecto_schema?(schema) do
+      case AstHelpers.parse_module_source(schema) do
+        {:ok, _module, ast} -> find_cast_fields_in_ast(ast)
+        :error -> []
+      end
+    else
+      []
+    end
+  end
+
+  defp find_cast_fields_in_ast(ast) do
+    {_, fields} =
+      Macro.prewalk(ast, [], fn
+        {:cast, _, [_struct, _params, fields]} = node, [] when is_list(fields) ->
+          {node, extract_atom_fields(fields)}
+
+        {:cast, _, [_params, fields]} = node, [] when is_list(fields) ->
+          {node, extract_atom_fields(fields)}
+
+        node, acc ->
+          {node, acc}
+      end)
+
+    fields
+  end
+
+  defp find_wrapper_key(param_keys) do
+    Enum.find_value(param_keys, fn
+      %{name: name} when is_binary(name) and name not in ["id"] -> name
+      _ -> nil
+    end)
+  end
+
+  defp wrap_fields(wrapper, fields) do
+    inner_schema = %{
+      type: "object",
+      properties: Map.new(fields, fn %{name: name, type: type} -> {name, type} end),
+      required: Enum.map(fields, & &1.name) |> Enum.sort()
+    }
+
+    [%{name: wrapper, type: inner_schema}]
   end
 
   defp resolve_fields_from_schema(schema, fields) do

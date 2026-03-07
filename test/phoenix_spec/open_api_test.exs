@@ -88,8 +88,11 @@ defmodule PhoenixSpec.OpenAPITest do
 
     schema = request_body.content["application/json"].schema
     assert schema.type == "object"
-    assert schema.properties[:title] == %{type: "string"}
-    assert schema.properties[:published] == %{type: "boolean"}
+
+    post_wrapper = schema.properties[:post]
+    assert post_wrapper.type == "object"
+    assert post_wrapper.properties[:title] == %{type: "string"}
+    assert post_wrapper.properties[:published] == %{type: "boolean"}
   end
 
   test "create action returns 201 status", %{spec: spec} do

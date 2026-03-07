@@ -4,34 +4,40 @@ defmodule PhoenixSpec.ParamsExtractorTest do
   alias PhoenixSpec.ParamsExtractor
   alias PhoenixSpec.ParamsExtractor.ParamsInfo
 
-  test "extracts changeset fields from create action" do
+  test "extracts changeset fields wrapped under param key" do
     params = ParamsExtractor.extract(TestAppWeb.PostController)
 
     assert %ParamsInfo{} = params[:create]
-    field_names = Enum.map(params[:create].fields, & &1.name)
+    assert [wrapper] = params[:create].fields
+    assert wrapper.name == "post"
+    assert wrapper.type.type == "object"
 
-    assert :title in field_names
-    assert :body in field_names
-    assert :published in field_names
+    inner_fields = wrapper.type.properties
+    assert inner_fields[:title] == %{type: "string"}
+    assert inner_fields[:body] == %{type: "string"}
+    assert inner_fields[:published] == %{type: "boolean"}
   end
 
-  test "resolves field types from Ecto schema" do
+  test "resolves field types from Ecto schema in wrapper" do
     params = ParamsExtractor.extract(TestAppWeb.PostController)
-    fields = Map.new(params[:create].fields, &{&1.name, &1})
+    [wrapper] = params[:create].fields
 
-    assert fields[:title].type == %{type: "string"}
-    assert fields[:body].type == %{type: "string"}
-    assert fields[:published].type == %{type: "boolean"}
+    inner = wrapper.type.properties
+    assert inner[:title] == %{type: "string"}
+    assert inner[:body] == %{type: "string"}
+    assert inner[:published] == %{type: "boolean"}
   end
 
-  test "extracts update action fields" do
+  test "update action wraps changeset fields" do
     params = ParamsExtractor.extract(TestAppWeb.PostController)
 
     assert %ParamsInfo{} = params[:update]
-    field_names = Enum.map(params[:update].fields, & &1.name)
+    [wrapper] = params[:update].fields
+    assert wrapper.name == "post"
 
-    assert :title in field_names
-    assert :body in field_names
-    refute :published in field_names
+    inner = wrapper.type.properties
+    assert Map.has_key?(inner, :title)
+    assert Map.has_key?(inner, :body)
+    refute Map.has_key?(inner, :published)
   end
 end
