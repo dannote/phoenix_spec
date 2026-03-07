@@ -127,4 +127,22 @@ defmodule PhoenixSpec.ViewExtractorTest do
     assert ViewExtractor.view_module_to_schema_name(TestAppWeb.UserJSON) == "User"
     assert ViewExtractor.view_module_to_schema_name(TestAppWeb.CommentJSON) == "Comment"
   end
+
+  test "resolves fields through association traversal" do
+    info = ViewExtractor.extract(TestAppWeb.CommentJSON)
+    field_map = Map.new(info.fields, &{&1.name, &1})
+
+    assert field_map[:author_name].type == %{type: "string"}
+    assert field_map[:author_email].type == %{type: "string"}
+    assert field_map[:post_title].type == %{type: "string"}
+  end
+
+  test "infers schema from alias when data/1 has no struct match" do
+    info = ViewExtractor.extract(TestAppWeb.CommentDetailJSON)
+
+    assert info.schema == TestApp.Comment
+    field_map = Map.new(info.fields, &{&1.name, &1})
+    assert field_map[:id].type == %{type: "integer"}
+    assert field_map[:body].type == %{type: "string"}
+  end
 end

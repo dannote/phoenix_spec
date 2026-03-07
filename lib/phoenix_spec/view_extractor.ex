@@ -132,12 +132,26 @@ defmodule PhoenixSpec.ViewExtractor do
 
     case data_fn do
       {_, :data, args, body} ->
-        schema = extract_schema_from_args(args, aliases)
+        schema =
+          extract_schema_from_args(args, aliases) || infer_schema_from_aliases(aliases)
+
         fields = extract_fields_from_body(body, schema, aliases, optional_fields, spec_types)
         {schema, fields}
 
       nil ->
         {nil, []}
+    end
+  end
+
+  defp infer_schema_from_aliases(aliases) do
+    ecto_schemas =
+      aliases
+      |> Map.values()
+      |> Enum.filter(&SchemaResolver.ecto_schema?/1)
+
+    case ecto_schemas do
+      [single] -> single
+      _ -> nil
     end
   end
 
@@ -230,6 +244,17 @@ defmodule PhoenixSpec.ViewExtractor do
 
   defp classify_value({{:., _, [Access, :get]}, _, _}, _schema, _aliases), do: :unknown
 
+  # Detect `entity.assoc.field` — two-level access through an association
+  defp classify_value(
+         {{:., _, [{{:., _, [{_var, _, _}, assoc_name]}, _, []}, field]}, _, []},
+         schema,
+         _aliases
+       )
+       when is_atom(assoc_name) and is_atom(field) do
+    type = resolve_association_field_type(schema, assoc_name, field)
+    {:schema_field, field, type}
+  end
+
   # Detect `post.field` access
   defp classify_value({{:., _, [{var, _, _}, field]}, _, []}, schema, _aliases)
        when is_atom(field) and is_atom(var) do
@@ -295,6 +320,19 @@ defmodule PhoenixSpec.ViewExtractor do
     case schema.__schema__(:type, field) do
       nil -> %{}
       type -> PhoenixSpec.TypeMapping.to_openapi(type)
+    end
+  end
+
+  defp resolve_association_field_type(nil, _assoc, _field), do: %{}
+
+  defp resolve_association_field_type(schema, assoc_name, field) do
+    if SchemaResolver.ecto_schema?(schema) do
+      case SchemaResolver.association(schema, assoc_name) do
+        %{related: related_schema} -> resolve_field_type(related_schema, field)
+        _ -> %{}
+      end
+    else
+      %{}
     end
   end
 

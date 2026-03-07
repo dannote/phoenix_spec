@@ -92,6 +92,24 @@ defmodule TestAppWeb.CommentJSON do
   defp data(%Comment{} = comment) do
     %{
       id: comment.id,
+      body: comment.body,
+      author_name: comment.user.name,
+      author_email: comment.user.email,
+      post_title: comment.post.title
+    }
+  end
+end
+
+defmodule TestAppWeb.CommentDetailJSON do
+  alias TestApp.Comment
+
+  def show(%{comment: comment}) do
+    %{data: data(comment)}
+  end
+
+  defp data(comment) do
+    %{
+      id: comment.id,
       body: comment.body
     }
   end
