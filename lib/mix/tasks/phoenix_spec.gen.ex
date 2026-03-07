@@ -12,7 +12,7 @@ defmodule Mix.Tasks.PhoenixSpec.Gen do
     * `--output` - Output file path (default: `priv/static/openapi.json`)
     * `--title` - API title (default: app name)
     * `--version` - API version (default: `"1.0.0"`)
-    * `--format` - Output format: `json` or `yaml` (default: `json`)
+    * `--format` - Output format: `json`, `yaml`, or `ts` (default: `json`)
 
   """
 
@@ -41,24 +41,37 @@ defmodule Mix.Tasks.PhoenixSpec.Gen do
     title = Keyword.get(opts, :title, default_title())
     version = Keyword.get(opts, :version, "1.0.0")
 
-    Mix.shell().info("Generating OpenAPI spec from #{inspect(router)}...")
+    case format do
+      "ts" ->
+        Mix.shell().info("Generating TypeScript definitions from #{inspect(router)}...")
 
-    spec =
-      PhoenixSpec.OpenAPI.generate(
-        router: router,
-        title: title,
-        version: version
-      )
+        content = PhoenixSpec.TypeScript.generate(router: router)
 
-    content = encode(spec, format)
+        File.mkdir_p!(Path.dirname(output))
+        File.write!(output, content)
 
-    File.mkdir_p!(Path.dirname(output))
-    File.write!(output, content)
+        Mix.shell().info("Generated #{output}")
 
-    schema_count = map_size(spec.components.schemas)
-    path_count = map_size(spec.paths)
+      _ ->
+        Mix.shell().info("Generating OpenAPI spec from #{inspect(router)}...")
 
-    Mix.shell().info("Generated #{output} (#{schema_count} schemas, #{path_count} paths)")
+        spec =
+          PhoenixSpec.OpenAPI.generate(
+            router: router,
+            title: title,
+            version: version
+          )
+
+        content = encode(spec, format)
+
+        File.mkdir_p!(Path.dirname(output))
+        File.write!(output, content)
+
+        schema_count = map_size(spec.components.schemas)
+        path_count = map_size(spec.paths)
+
+        Mix.shell().info("Generated #{output} (#{schema_count} schemas, #{path_count} paths)")
+    end
   end
 
   defp resolve_router(opts) do
@@ -91,6 +104,7 @@ defmodule Mix.Tasks.PhoenixSpec.Gen do
   end
 
   defp default_output("yaml"), do: "priv/static/openapi.yaml"
+  defp default_output("ts"), do: "priv/static/api.d.ts"
   defp default_output(_), do: "priv/static/openapi.json"
 
   defp encode(spec, "yaml") do

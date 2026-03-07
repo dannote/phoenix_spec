@@ -31,6 +31,11 @@ defmodule TestAppWeb.CommentController do
   def call(conn, _opts), do: conn
 end
 
+defmodule TestAppWeb.UserDetailController do
+  def init(opts), do: opts
+  def call(conn, _opts), do: conn
+end
+
 defmodule TestAppWeb.Router do
   use Phoenix.Router
 
@@ -45,5 +50,6 @@ defmodule TestAppWeb.Router do
     resources "/users", UserController, only: [:index, :show]
 
     resources "/posts/:post_id/comments", CommentController, only: [:index, :show]
+    get "/users/:id/detail", UserDetailController, :show
   end
 end
