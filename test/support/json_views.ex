@@ -52,6 +52,9 @@ end
 defmodule TestAppWeb.UserDetailJSON do
   alias TestApp.User
 
+  Module.register_attribute(__MODULE__, :optional, persist: true)
+  Module.register_attribute(__MODULE__, :field_types, persist: true)
+
   @optional [:age, :avatar_url]
   @field_types reading_time: :integer, avatar_url: :string
 

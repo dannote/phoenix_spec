@@ -117,7 +117,12 @@ defmodule PhoenixSpec.ViewExtractor do
   end
 
   @doc false
-  def extract_data_function(functions, aliases, optional_fields \\ MapSet.new(), spec_types \\ %{}) do
+  def extract_data_function(
+        functions,
+        aliases,
+        optional_fields \\ MapSet.new(),
+        spec_types \\ %{}
+      ) do
     data_fn =
       Enum.find(functions, fn
         {:defp, :data, _, _} -> true
@@ -304,7 +309,7 @@ defmodule PhoenixSpec.ViewExtractor do
     end)
   end
 
-  defp analyze_action_body([do: body]), do: analyze_action_body(body)
+  defp analyze_action_body(do: body), do: analyze_action_body(body)
 
   defp analyze_action_body({:%{}, _, pairs}) do
     case pairs do

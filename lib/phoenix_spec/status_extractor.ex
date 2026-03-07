@@ -51,7 +51,7 @@ defmodule PhoenixSpec.StatusExtractor do
     Map.new(actions)
   end
 
-  defp detect_status([do: body]), do: detect_status(body)
+  defp detect_status(do: body), do: detect_status(body)
 
   defp detect_status(body) do
     {_, status} =

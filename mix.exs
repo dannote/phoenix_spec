@@ -17,8 +17,17 @@ defmodule PhoenixSpec.MixProject do
       description:
         "Automatically generate OpenAPI 3.1 specs from Phoenix JSON views and Ecto schemas",
       source_url: @source_url,
-      elixirc_paths: elixirc_paths(Mix.env())
+      elixirc_paths: elixirc_paths(Mix.env()),
+      aliases: aliases(),
+      dialyzer: [
+        plt_file: {:no_warn, "_build/dev/dialyxir_plt.plt"},
+        plt_add_apps: [:mix]
+      ]
     ]
+  end
+
+  def cli do
+    [preferred_envs: [ci: :test]]
   end
 
   def application do
@@ -38,7 +47,8 @@ defmodule PhoenixSpec.MixProject do
       {:yaml_elixir, "~> 2.9", optional: true},
       {:ex_doc, "~> 0.30", only: :dev, runtime: false},
       {:ex_dna, "~> 1.1", only: [:dev, :test], runtime: false},
-      {:ex_slop, "~> 0.1", only: [:dev, :test], runtime: false}
+      {:ex_slop, "~> 0.1", only: [:dev, :test], runtime: false},
+      {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false}
     ]
   end
 
@@ -47,6 +57,19 @@ defmodule PhoenixSpec.MixProject do
       licenses: ["MIT"],
       links: %{"GitHub" => @source_url},
       files: ~w(lib mix.exs README.md LICENSE CHANGELOG.md)
+    ]
+  end
+
+  defp aliases do
+    [
+      ci: [
+        "compile --warnings-as-errors",
+        "format --check-formatted",
+        "test",
+        "credo --strict",
+        "dialyzer",
+        "ex_dna"
+      ]
     ]
   end
 

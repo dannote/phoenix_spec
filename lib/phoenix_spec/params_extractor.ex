@@ -138,7 +138,7 @@ defmodule PhoenixSpec.ParamsExtractor do
     end)
   end
 
-  defp extract_param_keys_from_body([do: body]), do: extract_param_keys_from_body(body)
+  defp extract_param_keys_from_body(do: body), do: extract_param_keys_from_body(body)
 
   defp extract_param_keys_from_body(body) do
     {_, keys} =

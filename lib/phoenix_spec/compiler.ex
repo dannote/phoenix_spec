@@ -83,8 +83,12 @@ defmodule PhoenixSpec.Compiler do
   end
 
   defp generate_content("ts", opts), do: PhoenixSpec.TypeScript.generate(opts)
-  defp generate_content("yaml", opts), do: opts |> PhoenixSpec.OpenAPI.generate() |> PhoenixSpec.OpenAPI.to_yaml()
-  defp generate_content(_, opts), do: opts |> PhoenixSpec.OpenAPI.generate() |> PhoenixSpec.OpenAPI.to_json()
+
+  defp generate_content("yaml", opts),
+    do: opts |> PhoenixSpec.OpenAPI.generate() |> PhoenixSpec.OpenAPI.to_yaml()
+
+  defp generate_content(_, opts),
+    do: opts |> PhoenixSpec.OpenAPI.generate() |> PhoenixSpec.OpenAPI.to_json()
 
   defp write_output(output, content) do
     File.mkdir_p!(Path.dirname(output))
