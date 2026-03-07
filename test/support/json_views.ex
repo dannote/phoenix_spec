@@ -103,7 +103,7 @@ end
 defmodule TestAppWeb.CommentDetailJSON do
   alias TestApp.Comment
 
-  def show(%{comment: comment}) do
+  def show(%{comment: %Comment{} = comment}) do
     %{data: data(comment)}
   end
 
@@ -160,7 +160,7 @@ end
 defmodule TestAppWeb.PostMetaJSON do
   alias TestApp.Post
 
-  def show(%{post: post}) do
+  def show(%{post: %Post{} = post}) do
     %{
       data: %{
         author: %{
