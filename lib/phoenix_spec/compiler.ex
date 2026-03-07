@@ -44,14 +44,10 @@ defmodule PhoenixSpec.Compiler do
     config = Application.get_all_env(:phoenix_spec)
     router = Keyword.get(config, :router)
 
-    unless router do
-      {:noop, []}
+    if router && should_regenerate?(config) do
+      regenerate(config, router)
     else
-      if should_regenerate?(config) do
-        regenerate(config, router)
-      else
-        {:noop, []}
-      end
+      {:noop, []}
     end
   end
 
@@ -77,36 +73,23 @@ defmodule PhoenixSpec.Compiler do
     outputs = resolve_outputs(config)
 
     Enum.each(outputs, fn {output, format} ->
-      case format do
-        "ts" ->
-          content = PhoenixSpec.TypeScript.generate(router: router)
-          File.mkdir_p!(Path.dirname(output))
-          File.write!(output, content)
-          Mix.shell().info("[phoenix_spec] Generated #{output}")
-
-        format ->
-          spec =
-            PhoenixSpec.OpenAPI.generate(
-              router: router,
-              title: title,
-              version: version
-            )
-
-          content =
-            case format do
-              "yaml" -> PhoenixSpec.OpenAPI.to_yaml(spec)
-              _ -> PhoenixSpec.OpenAPI.to_json(spec)
-            end
-
-          File.mkdir_p!(Path.dirname(output))
-          File.write!(output, content)
-          Mix.shell().info("[phoenix_spec] Generated #{output}")
-      end
+      content = generate_content(format, router: router, title: title, version: version)
+      write_output(output, content)
     end)
 
     source_files = source_files(config)
     write_manifest(%{hash: hash_files(source_files)})
     {:ok, []}
+  end
+
+  defp generate_content("ts", opts), do: PhoenixSpec.TypeScript.generate(opts)
+  defp generate_content("yaml", opts), do: opts |> PhoenixSpec.OpenAPI.generate() |> PhoenixSpec.OpenAPI.to_yaml()
+  defp generate_content(_, opts), do: opts |> PhoenixSpec.OpenAPI.generate() |> PhoenixSpec.OpenAPI.to_json()
+
+  defp write_output(output, content) do
+    File.mkdir_p!(Path.dirname(output))
+    File.write!(output, content)
+    Mix.shell().info("[phoenix_spec] Generated #{output}")
   end
 
   defp resolve_outputs(config) do
@@ -128,23 +111,21 @@ defmodule PhoenixSpec.Compiler do
     router = Keyword.get(config, :router)
 
     if router && Code.ensure_loaded?(router) do
-      controllers =
-        router.__routes__()
-        |> Enum.map(& &1.plug)
-        |> Enum.uniq()
-
+      controllers = router.__routes__() |> Enum.map(& &1.plug) |> Enum.uniq()
       view_modules = PhoenixSpec.Discovery.json_views_from_router(router)
 
       (controllers ++ view_modules)
-      |> Enum.flat_map(fn mod ->
-        case mod.module_info(:compile)[:source] do
-          nil -> []
-          source -> [List.to_string(source)]
-        end
-      end)
+      |> Enum.flat_map(&module_source_path/1)
       |> Enum.uniq()
     else
       []
+    end
+  end
+
+  defp module_source_path(mod) do
+    case mod.module_info(:compile)[:source] do
+      nil -> []
+      source -> [List.to_string(source)]
     end
   end
 

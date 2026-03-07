@@ -6,7 +6,7 @@ defmodule PhoenixSpec.TypeScript do
   """
 
   alias PhoenixSpec.ViewExtractor
-  alias PhoenixSpec.ViewExtractor.{ViewInfo, Field}
+  alias PhoenixSpec.ViewExtractor.{Field, ViewInfo}
 
   @doc """
   Generates TypeScript type definitions from the given options.

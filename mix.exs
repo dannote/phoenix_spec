@@ -36,7 +36,9 @@ defmodule PhoenixSpec.MixProject do
       {:ecto, "~> 3.10", optional: true},
       {:jason, "~> 1.0"},
       {:yaml_elixir, "~> 2.9", optional: true},
-      {:ex_doc, "~> 0.30", only: :dev, runtime: false}
+      {:ex_doc, "~> 0.30", only: :dev, runtime: false},
+      {:ex_dna, "~> 1.1", only: [:dev, :test], runtime: false},
+      {:ex_slop, "~> 0.1", only: [:dev, :test], runtime: false}
     ]
   end
 

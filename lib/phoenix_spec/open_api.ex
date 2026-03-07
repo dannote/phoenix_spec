@@ -4,7 +4,7 @@ defmodule PhoenixSpec.OpenAPI do
   """
 
   alias PhoenixSpec.{Discovery, ParamsExtractor, ViewExtractor}
-  alias PhoenixSpec.ViewExtractor.{ViewInfo, Field}
+  alias PhoenixSpec.ViewExtractor.{Field, ViewInfo}
 
   @doc """
   Builds a complete OpenAPI 3.1 document.
@@ -101,12 +101,11 @@ defmodule PhoenixSpec.OpenAPI do
     router.__routes__()
     |> Enum.filter(&json_route?/1)
     |> Enum.group_by(& &1.path)
-    |> Enum.map(fn {path, routes} ->
+    |> Map.new(fn {path, routes} ->
       openapi_path = phoenix_path_to_openapi(path)
       operations = build_operations(routes, view_map, params_map)
       {openapi_path, operations}
     end)
-    |> Enum.into(%{})
   end
 
   defp build_view_lookup(view_infos) do
@@ -294,7 +293,7 @@ defmodule PhoenixSpec.OpenAPI do
 
   defp to_yaml_str(map, indent) when is_map(map) do
     map
-    |> Enum.map(fn {key, value} ->
+    |> Enum.map_join("\n", fn {key, value} ->
       prefix = String.duplicate("  ", indent)
 
       case value do
@@ -309,7 +308,6 @@ defmodule PhoenixSpec.OpenAPI do
           "#{prefix}#{key}: #{to_yaml_value(value)}"
       end
     end)
-    |> Enum.join("\n")
   end
 
   defp to_yaml_value(nil), do: "null"

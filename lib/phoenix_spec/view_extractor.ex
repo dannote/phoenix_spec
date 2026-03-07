@@ -10,7 +10,7 @@ defmodule PhoenixSpec.ViewExtractor do
   - Optional fields via `@optional` attribute or inline conditionals
   """
 
-  alias PhoenixSpec.SchemaResolver
+  alias PhoenixSpec.{AstHelpers, SchemaResolver}
 
   defmodule Field do
     @moduledoc false
@@ -67,9 +67,9 @@ defmodule PhoenixSpec.ViewExtractor do
   end
 
   defp extract_from_ast(module, ast) do
-    module_ast = find_module_ast(ast, module)
+    module_ast = AstHelpers.find_module_ast(ast, module)
     body = module_ast || ast
-    aliases = collect_aliases(body)
+    aliases = AstHelpers.collect_aliases(body)
     functions = collect_functions(body)
     optional_fields = collect_optional_attr(body)
     {schema, fields} = extract_data_function(functions, aliases, optional_fields)
@@ -81,39 +81,6 @@ defmodule PhoenixSpec.ViewExtractor do
       fields: fields,
       actions: actions
     }
-  end
-
-  defp find_module_ast(ast, target_module) do
-    target_parts = Module.split(target_module)
-
-    {_, found} =
-      Macro.prewalk(ast, nil, fn
-        {:defmodule, _, [{:__aliases__, _, parts}, [do: body]]} = node, nil ->
-          if Enum.map(parts, &Atom.to_string/1) == target_parts do
-            {node, body}
-          else
-            {node, nil}
-          end
-
-        node, acc ->
-          {node, acc}
-      end)
-
-    found
-  end
-
-  defp collect_aliases(ast) do
-    {_, aliases} =
-      Macro.prewalk(ast, %{}, fn
-        {:alias, _, [{:__aliases__, _, full_parts}]} = node, acc ->
-          short = List.last(full_parts)
-          {node, Map.put(acc, short, Module.concat(full_parts))}
-
-        node, acc ->
-          {node, acc}
-      end)
-
-    aliases
   end
 
   defp collect_optional_attr(ast) do
@@ -307,18 +274,16 @@ defmodule PhoenixSpec.ViewExtractor do
 
   defp resolve_field_type(schema, field) do
     if SchemaResolver.ecto_schema?(schema) do
-      case schema.__schema__(:type, field) do
-        nil ->
-          case SchemaResolver.association(schema, field) do
-            nil -> %{}
-            _assoc -> %{}
-          end
-
-        type ->
-          PhoenixSpec.TypeMapping.to_openapi(type)
-      end
+      resolve_ecto_field_type(schema, field)
     else
       %{}
+    end
+  end
+
+  defp resolve_ecto_field_type(schema, field) do
+    case schema.__schema__(:type, field) do
+      nil -> %{}
+      type -> PhoenixSpec.TypeMapping.to_openapi(type)
     end
   end
 

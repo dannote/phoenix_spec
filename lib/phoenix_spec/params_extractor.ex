@@ -10,7 +10,7 @@ defmodule PhoenixSpec.ParamsExtractor do
   - Permit-style: extracting known keys from params
   """
 
-  alias PhoenixSpec.SchemaResolver
+  alias PhoenixSpec.{AstHelpers, SchemaResolver}
 
   defmodule ParamsInfo do
     @moduledoc false
@@ -48,47 +48,14 @@ defmodule PhoenixSpec.ParamsExtractor do
   end
 
   defp extract_from_ast(controller, ast) do
-    module_ast = find_module_ast(ast, controller)
-    aliases = collect_aliases(module_ast || ast)
+    module_ast = AstHelpers.find_module_ast(ast, controller)
+    aliases = AstHelpers.collect_aliases(module_ast || ast)
     functions = collect_action_functions(module_ast || ast)
 
     Map.new(functions, fn {action, args, body} ->
       params_info = analyze_action(action, args, body, aliases)
       {action, params_info}
     end)
-  end
-
-  defp find_module_ast(ast, target_module) do
-    target_parts = Module.split(target_module)
-
-    {_, found} =
-      Macro.prewalk(ast, nil, fn
-        {:defmodule, _, [{:__aliases__, _, parts}, [do: body]]} = node, nil ->
-          if Enum.map(parts, &Atom.to_string/1) == target_parts do
-            {node, body}
-          else
-            {node, nil}
-          end
-
-        node, acc ->
-          {node, acc}
-      end)
-
-    found
-  end
-
-  defp collect_aliases(ast) do
-    {_, aliases} =
-      Macro.prewalk(ast, %{}, fn
-        {:alias, _, [{:__aliases__, _, full_parts}]} = node, acc ->
-          short = List.last(full_parts)
-          {node, Map.put(acc, short, Module.concat(full_parts))}
-
-        node, acc ->
-          {node, acc}
-      end)
-
-    aliases
   end
 
   @action_names [:create, :update]
@@ -203,25 +170,24 @@ defmodule PhoenixSpec.ParamsExtractor do
     Enum.reverse(keys)
   end
 
-  defp resolve_fields_from_schema(nil, fields) do
-    Enum.map(fields, &%{name: &1, type: %{type: "string"}})
+  defp resolve_fields_from_schema(schema, fields) do
+    Enum.map(fields, fn field ->
+      %{name: field, type: resolve_param_type(schema, field)}
+    end)
   end
 
-  defp resolve_fields_from_schema(schema, fields) do
+  defp resolve_param_type(schema, field) when not is_nil(schema) do
     if SchemaResolver.ecto_schema?(schema) do
-      Enum.map(fields, fn field ->
-        type =
-          case schema.__schema__(:type, field) do
-            nil -> %{type: "string"}
-            ecto_type -> PhoenixSpec.TypeMapping.to_openapi(ecto_type)
-          end
-
-        %{name: field, type: type}
-      end)
+      case schema.__schema__(:type, field) do
+        nil -> %{type: "string"}
+        ecto_type -> PhoenixSpec.TypeMapping.to_openapi(ecto_type)
+      end
     else
-      Enum.map(fields, &%{name: &1, type: %{type: "string"}})
+      %{type: "string"}
     end
   end
+
+  defp resolve_param_type(nil, _field), do: %{type: "string"}
 
   defp resolve_module_parts([single], aliases) when is_atom(single) do
     Map.get(aliases, single, single)
