@@ -101,10 +101,12 @@ PhoenixSpec generates:
 | `post.published_at` (`:utc_datetime`) | `{type: "string", format: "date-time"}` |
 | `post.status` (`Ecto.Enum`) | `{type: "string", enum: [...]}` |
 | `post.tags` (`{:array, :string}`) | `{type: "array", items: {type: "string"}}` |
+| `cost.amount` (through `belongs_to :cost`) | resolved from associated schema |
 | `MyAppWeb.UserJSON.data(post.author)` | `$ref` to User schema |
 | `for(c <- comments, do: CommentJSON.data(c))` | array of `$ref` |
 | `%{data: for(...)}` in `index/1` | wrapped array response |
 | `%{data: data(post)}` in `show/1` | wrapped object response |
+| `%{name: x, email: y}` inline map literal | inline `object` with typed properties |
 | Route `get "/posts/:id"` | path parameter `{id}` |
 | `user.address` (`embeds_one`) | inline object schema |
 | `user.links` (`embeds_many`) | array of inline objects |
@@ -112,6 +114,8 @@ PhoenixSpec generates:
 | `Ecto.Changeset.cast(struct, params, [:f1, :f2])` | request body schema |
 | `put_status(conn, :created)` | 201 response code |
 | `send_resp(conn, :no_content, "")` | 204 response code |
+| `create` action | 422 error response |
+| `show` / `update` / `delete` action | 404 error response |
 
 ### Ecto type mapping
 
@@ -218,18 +222,54 @@ Custom status codes set via `put_status` or `send_resp` in the controller body t
 
 ## Request Bodies
 
-PhoenixSpec detects `Ecto.Changeset.cast/3` calls in controller `create` and `update` actions:
+PhoenixSpec detects `Ecto.Changeset.cast/3` calls to build typed request body schemas. It handles two patterns:
+
+**Direct cast in controller** (custom controllers):
 
 ```elixir
 def create(conn, %{"post" => post_params}) do
-  %Post{}
-  |> Post.changeset(post_params)
-  |> Repo.insert()
-  # ...
+  %Post{} |> Ecto.Changeset.cast(post_params, [:title, :body, :published])
 end
 ```
 
-If `changeset/2` calls `cast(struct, params, [:title, :body, :published])`, PhoenixSpec generates a typed `requestBody` schema using the Ecto schema types.
+**Delegation via context module** (standard `phx.gen.json` pattern):
+
+```elixir
+# Controller
+def create(conn, %{"post" => post_params}) do
+  with {:ok, %Post{} = post} <- Blog.create_post(post_params) do ...
+
+# Schema — PhoenixSpec finds cast/3 here automatically
+def changeset(post, attrs) do
+  post |> cast(attrs, [:title, :body, :published]) |> validate_required([:title])
+end
+```
+
+Both produce a properly nested request body:
+
+```json
+{
+  "requestBody": {
+    "content": {
+      "application/json": {
+        "schema": {
+          "type": "object",
+          "properties": {
+            "post": {
+              "type": "object",
+              "properties": {
+                "title": { "type": "string" },
+                "body": { "type": "string" },
+                "published": { "type": "boolean" }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
+```
 
 ## TypeScript Output
 
@@ -322,13 +362,16 @@ mix phoenix_spec.gen \
 - [x] Mix task
 - [x] Ecto.Enum value extraction
 - [x] Conditional / optional field detection
-- [x] Request body schemas from controller params
+- [x] Request body schemas from controller/schema changeset
 - [x] TypeScript `.d.ts` output
 - [x] Mix compiler integration (auto-regenerate)
 - [x] `@field_types` annotation for computed fields
 - [x] Embedded schemas (`embeds_one` / `embeds_many`)
 - [x] Response status code inference from controller AST
-- [ ] Error response schemas (422, 404)
+- [x] Error response schemas (404, 422)
+- [x] Association traversal (`post.author.name`)
+- [x] Inline map literals as object schemas
+- [x] Operation summaries and unique operationIds
 - [ ] Polymorphic associations / `oneOf`
 
 ## License
