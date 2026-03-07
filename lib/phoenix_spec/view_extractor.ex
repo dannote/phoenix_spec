@@ -50,19 +50,9 @@ defmodule PhoenixSpec.ViewExtractor do
   """
   @spec extract(module()) :: ViewInfo.t() | nil
   def extract(module) do
-    with {:ok, source_path} <- source_path(module),
-         {:ok, source} <- File.read(source_path),
-         {:ok, ast} <- Code.string_to_quoted(source) do
-      extract_from_ast(module, ast)
-    else
-      _ -> nil
-    end
-  end
-
-  defp source_path(module) do
-    case module.module_info(:compile)[:source] do
-      nil -> :error
-      source -> {:ok, List.to_string(source)}
+    case AstHelpers.parse_module_source(module) do
+      {:ok, _module, ast} -> extract_from_ast(module, ast)
+      :error -> nil
     end
   end
 
@@ -72,7 +62,8 @@ defmodule PhoenixSpec.ViewExtractor do
     aliases = AstHelpers.collect_aliases(body)
     functions = collect_functions(body)
     optional_fields = collect_optional_attr(body)
-    {schema, fields} = extract_data_function(functions, aliases, optional_fields)
+    spec_types = collect_spec_attr(body)
+    {schema, fields} = extract_data_function(functions, aliases, optional_fields, spec_types)
     actions = extract_actions(functions)
 
     %ViewInfo{
@@ -96,6 +87,19 @@ defmodule PhoenixSpec.ViewExtractor do
     optional
   end
 
+  defp collect_spec_attr(ast) do
+    {_, specs} =
+      Macro.prewalk(ast, %{}, fn
+        {:@, _, [{:field_types, _, [fields]}]} = node, acc when is_list(fields) ->
+          {node, Map.merge(acc, Map.new(fields))}
+
+        node, acc ->
+          {node, acc}
+      end)
+
+    specs
+  end
+
   defp collect_functions(ast) do
     {_, functions} =
       Macro.prewalk(ast, [], fn
@@ -113,7 +117,7 @@ defmodule PhoenixSpec.ViewExtractor do
   end
 
   @doc false
-  def extract_data_function(functions, aliases, optional_fields \\ MapSet.new()) do
+  def extract_data_function(functions, aliases, optional_fields \\ MapSet.new(), spec_types \\ %{}) do
     data_fn =
       Enum.find(functions, fn
         {:defp, :data, _, _} -> true
@@ -124,7 +128,7 @@ defmodule PhoenixSpec.ViewExtractor do
     case data_fn do
       {_, :data, args, body} ->
         schema = extract_schema_from_args(args, aliases)
-        fields = extract_fields_from_body(body, schema, aliases, optional_fields)
+        fields = extract_fields_from_body(body, schema, aliases, optional_fields, spec_types)
         {schema, fields}
 
       nil ->
@@ -154,31 +158,34 @@ defmodule PhoenixSpec.ViewExtractor do
 
   defp resolve_alias(_, _aliases), do: nil
 
-  defp extract_fields_from_body([do: body], schema, aliases, optional) do
-    extract_fields_from_body(body, schema, aliases, optional)
+  defp extract_fields_from_body([do: body], schema, aliases, optional, spec_types) do
+    extract_fields_from_body(body, schema, aliases, optional, spec_types)
   end
 
-  defp extract_fields_from_body({:%{}, _, pairs}, schema, aliases, optional) do
+  defp extract_fields_from_body({:%{}, _, pairs}, schema, aliases, optional, spec_types) do
     Enum.map(pairs, fn {key, value} ->
-      build_field(key, value, schema, aliases, optional)
+      build_field(key, value, schema, aliases, optional, spec_types)
     end)
   end
 
-  defp extract_fields_from_body({:__block__, _, exprs}, schema, aliases, optional) do
+  defp extract_fields_from_body({:__block__, _, exprs}, schema, aliases, optional, spec_types) do
     Enum.find_value(exprs, [], fn
       {:%{}, _, pairs} ->
-        Enum.map(pairs, fn {key, value} -> build_field(key, value, schema, aliases, optional) end)
+        Enum.map(pairs, fn {key, value} ->
+          build_field(key, value, schema, aliases, optional, spec_types)
+        end)
 
       _ ->
         nil
     end)
   end
 
-  defp extract_fields_from_body(_, _schema, _aliases, _optional), do: []
+  defp extract_fields_from_body(_, _schema, _aliases, _optional, _spec_types), do: []
 
-  defp build_field(key, value, schema, aliases, optional) do
+  defp build_field(key, value, schema, aliases, optional, spec_types) do
     explicitly_optional = MapSet.member?(optional, key)
     conditional = conditional_value?(value)
+    required = not explicitly_optional and not conditional
 
     case classify_value(value, schema, aliases) do
       {:schema_field, source_field, type} ->
@@ -187,26 +194,25 @@ defmodule PhoenixSpec.ViewExtractor do
           source_field: source_field,
           type: type,
           schema: schema,
-          required: not explicitly_optional and not conditional
+          required: required
         }
 
       {:ref, ref_name} ->
-        %Field{name: key, ref: ref_name, required: not explicitly_optional and not conditional}
+        %Field{name: key, ref: ref_name, required: required}
 
       {:list_ref, ref_name} ->
-        %Field{
-          name: key,
-          type: %{type: "array"},
-          items_ref: ref_name,
-          required: not explicitly_optional and not conditional
-        }
+        %Field{name: key, type: %{type: "array"}, items_ref: ref_name, required: required}
 
       :unknown ->
-        %Field{
-          name: key,
-          type: %{},
-          required: not explicitly_optional and not conditional
-        }
+        type = resolve_spec_type(key, spec_types)
+        %Field{name: key, type: type, required: required}
+    end
+  end
+
+  defp resolve_spec_type(key, spec_types) do
+    case Map.get(spec_types, key) do
+      nil -> %{}
+      ecto_type -> PhoenixSpec.TypeMapping.to_openapi(ecto_type)
     end
   end
 

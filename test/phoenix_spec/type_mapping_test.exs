@@ -49,6 +49,24 @@ defmodule PhoenixSpec.TypeMappingTest do
     assert "archived" in result.enum
   end
 
+  test "maps embeds_one to embedded type marker" do
+    embed_type = TestApp.User.__schema__(:type, :address)
+    result = TypeMapping.to_openapi(embed_type)
+
+    assert result.type == "embedded"
+    assert result.cardinality == :one
+    assert result.schema == TestApp.Address
+  end
+
+  test "maps embeds_many to embedded type marker" do
+    embed_type = TestApp.User.__schema__(:type, :social_links)
+    result = TypeMapping.to_openapi(embed_type)
+
+    assert result.type == "embedded"
+    assert result.cardinality == :many
+    assert result.schema == TestApp.SocialLink
+  end
+
   test "unknown types return empty map" do
     assert TypeMapping.to_openapi(:unknown_type) == %{}
   end

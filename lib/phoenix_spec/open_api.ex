@@ -3,7 +3,7 @@ defmodule PhoenixSpec.OpenAPI do
   Generates an OpenAPI 3.1 specification from extracted view and schema information.
   """
 
-  alias PhoenixSpec.{Discovery, ParamsExtractor, ViewExtractor}
+  alias PhoenixSpec.{Discovery, ParamsExtractor, StatusExtractor, ViewExtractor}
   alias PhoenixSpec.ViewExtractor.{Field, ViewInfo}
 
   @doc """
@@ -20,8 +20,9 @@ defmodule PhoenixSpec.OpenAPI do
     view_infos = Enum.map(json_views, &ViewExtractor.extract/1) |> Enum.reject(&is_nil/1)
     controllers = extract_controllers(router)
     params_map = extract_all_params(controllers)
+    status_map = extract_all_statuses(controllers)
     schemas = build_schemas(view_infos)
-    paths = build_paths(router, view_infos, params_map)
+    paths = build_paths(router, view_infos, params_map, status_map)
 
     spec = %{
       openapi: "3.1.0",
@@ -75,12 +76,34 @@ defmodule PhoenixSpec.OpenAPI do
     %{type: "array", items: %{"$ref": "#/components/schemas/#{items_ref}"}}
   end
 
+  defp field_to_property(%Field{type: %{type: "embedded", cardinality: :one, schema: schema}}) do
+    embedded_schema_to_openapi(schema)
+  end
+
+  defp field_to_property(%Field{type: %{type: "embedded", cardinality: :many, schema: schema}}) do
+    %{type: "array", items: embedded_schema_to_openapi(schema)}
+  end
+
   defp field_to_property(%Field{type: type}) when is_map(type) and map_size(type) > 0 do
     type
   end
 
   defp field_to_property(%Field{}) do
     %{}
+  end
+
+  defp embedded_schema_to_openapi(schema) do
+    fields = schema.__schema__(:fields) -- [:id]
+
+    properties =
+      Map.new(fields, fn field ->
+        type = schema.__schema__(:type, field)
+        {field, PhoenixSpec.TypeMapping.to_openapi(type)}
+      end)
+
+    required = fields |> Enum.sort()
+
+    %{type: "object", properties: properties, required: required}
   end
 
   defp extract_controllers(router) do
@@ -95,7 +118,13 @@ defmodule PhoenixSpec.OpenAPI do
     end)
   end
 
-  defp build_paths(router, view_infos, params_map) do
+  defp extract_all_statuses(controllers) do
+    Map.new(controllers, fn controller ->
+      {controller, StatusExtractor.extract(controller)}
+    end)
+  end
+
+  defp build_paths(router, view_infos, params_map, status_map) do
     view_map = build_view_lookup(view_infos)
 
     router.__routes__()
@@ -103,7 +132,7 @@ defmodule PhoenixSpec.OpenAPI do
     |> Enum.group_by(& &1.path)
     |> Map.new(fn {path, routes} ->
       openapi_path = phoenix_path_to_openapi(path)
-      operations = build_operations(routes, view_map, params_map)
+      operations = build_operations(routes, view_map, params_map, status_map)
       {openapi_path, operations}
     end)
   end
@@ -119,23 +148,24 @@ defmodule PhoenixSpec.OpenAPI do
     String.contains?(module_name, "Controller")
   end
 
-  defp build_operations(routes, view_map, params_map) do
+  defp build_operations(routes, view_map, params_map, status_map) do
     Map.new(routes, fn route ->
       verb = route_verb(route)
-      operation = build_operation(route, view_map, params_map)
+      operation = build_operation(route, view_map, params_map, status_map)
       {verb, operation}
     end)
   end
 
-  defp build_operation(route, view_map, params_map) do
+  defp build_operation(route, view_map, params_map, status_map) do
     action = route.plug_opts
     controller = route.plug
     json_view = controller_to_json_view(controller)
     view_info = Map.get(view_map, json_view)
+    status = get_in(status_map, [controller, action])
 
     operation = %{
       operationId: operation_id(controller, action),
-      responses: build_responses(action, view_info)
+      responses: build_responses(action, view_info, status)
     }
 
     path_params = extract_path_params(route.path)
@@ -180,54 +210,55 @@ defmodule PhoenixSpec.OpenAPI do
     }
   end
 
-  defp build_responses(action, nil) do
-    %{"200" => %{description: "Success", content: default_content(action)}}
+  defp build_responses(action, nil, status) do
+    code = to_string(status || default_status(action))
+    %{code => %{description: status_description(code), content: default_content()}}
   end
 
-  defp build_responses(action, %ViewInfo{actions: actions, module: module} = _view_info) do
-    schema_name = ViewExtractor.view_module_to_schema_name(module)
+  defp build_responses(action, %ViewInfo{actions: actions, module: module}, status) do
+    detected_status = status || default_status(action)
 
-    case Map.get(actions, action) do
-      %{wrapper_key: wrapper_key, list: true} ->
-        inner = %{type: "array", items: %{"$ref": "#/components/schemas/#{schema_name}"}}
+    case {detected_status, Map.get(actions, action)} do
+      {204, _} ->
+        %{"204" => %{description: "No Content"}}
 
-        schema =
-          if wrapper_key do
-            %{type: "object", properties: %{wrapper_key => inner}}
-          else
-            inner
-          end
+      {_, %{wrapper_key: wrapper_key, list: list}} ->
+        code = to_string(detected_status)
+        schema = build_response_schema(module, wrapper_key, list)
+        %{code => %{description: status_description(code), content: json_content(schema)}}
 
-        status = if action == :create, do: "201", else: "200"
-
-        %{
-          status => %{description: "Success", content: %{"application/json" => %{schema: schema}}}
-        }
-
-      %{wrapper_key: wrapper_key, list: false} ->
-        ref_schema = %{"$ref": "#/components/schemas/#{schema_name}"}
-
-        schema =
-          if wrapper_key do
-            %{type: "object", properties: %{wrapper_key => ref_schema}}
-          else
-            ref_schema
-          end
-
-        status = if action == :create, do: "201", else: "200"
-
-        %{
-          status => %{description: "Success", content: %{"application/json" => %{schema: schema}}}
-        }
-
-      nil ->
-        %{"200" => %{description: "Success", content: default_content(action)}}
+      {_, nil} ->
+        code = to_string(detected_status)
+        %{code => %{description: status_description(code), content: default_content()}}
     end
   end
 
-  defp default_content(_action) do
-    %{"application/json" => %{schema: %{type: "object"}}}
+  defp build_response_schema(module, wrapper_key, list) do
+    schema_name = ViewExtractor.view_module_to_schema_name(module)
+    ref = %{"$ref": "#/components/schemas/#{schema_name}"}
+
+    inner = if list, do: %{type: "array", items: ref}, else: ref
+
+    if wrapper_key do
+      %{type: "object", properties: %{wrapper_key => inner}}
+    else
+      inner
+    end
   end
+
+  defp default_status(:create), do: 201
+  defp default_status(:delete), do: 204
+  defp default_status(_), do: 200
+
+  defp status_description("200"), do: "Success"
+  defp status_description("201"), do: "Created"
+  defp status_description("202"), do: "Accepted"
+  defp status_description("204"), do: "No Content"
+  defp status_description(_), do: "Success"
+
+  defp json_content(schema), do: %{"application/json" => %{schema: schema}}
+
+  defp default_content, do: %{"application/json" => %{schema: %{type: "object"}}}
 
   defp extract_path_params(path) do
     Regex.scan(~r/:([a-zA-Z_]+)/, path)

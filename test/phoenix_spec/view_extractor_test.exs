@@ -39,11 +39,37 @@ defmodule PhoenixSpec.ViewExtractorTest do
     assert field_map[:tags].type == %{type: "array", items: %{type: "string"}}
   end
 
-  test "computed fields get empty type" do
+  test "computed fields get empty type when unannotated" do
     info = ViewExtractor.extract(TestAppWeb.PostJSON)
     field_map = Map.new(info.fields, &{&1.name, &1})
 
     assert field_map[:reading_time].type == %{}
+  end
+
+  test "@field_types annotation resolves computed field types" do
+    info = ViewExtractor.extract(TestAppWeb.UserDetailJSON)
+    field_map = Map.new(info.fields, &{&1.name, &1})
+
+    assert field_map[:reading_time].type == %{type: "integer"}
+    assert field_map[:avatar_url].type == %{type: "string"}
+  end
+
+  test "extracts embedded_one fields" do
+    info = ViewExtractor.extract(TestAppWeb.UserDetailJSON)
+    field_map = Map.new(info.fields, &{&1.name, &1})
+
+    assert field_map[:address].type.type == "embedded"
+    assert field_map[:address].type.cardinality == :one
+    assert field_map[:address].type.schema == TestApp.Address
+  end
+
+  test "extracts embedded_many fields" do
+    info = ViewExtractor.extract(TestAppWeb.UserDetailJSON)
+    field_map = Map.new(info.fields, &{&1.name, &1})
+
+    assert field_map[:social_links].type.type == "embedded"
+    assert field_map[:social_links].type.cardinality == :many
+    assert field_map[:social_links].type.schema == TestApp.SocialLink
   end
 
   test "detects reference to nested view (author)" do

@@ -21,6 +21,24 @@ defmodule PhoenixSpec.AstHelpers do
     found
   end
 
+  @spec parse_module_source(module()) :: {:ok, module(), Macro.t()} | :error
+  def parse_module_source(module) do
+    with {:ok, source_path} <- source_path(module),
+         {:ok, source} <- File.read(source_path),
+         {:ok, ast} <- Code.string_to_quoted(source) do
+      {:ok, module, ast}
+    else
+      _ -> :error
+    end
+  end
+
+  defp source_path(module) do
+    case module.module_info(:compile)[:source] do
+      nil -> :error
+      source -> {:ok, List.to_string(source)}
+    end
+  end
+
   @spec collect_aliases(Macro.t()) :: %{atom() => module()}
   def collect_aliases(ast) do
     {_, aliases} =

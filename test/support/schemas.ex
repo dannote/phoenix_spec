@@ -6,6 +6,8 @@ defmodule TestApp.User do
     field :email, :string
     field :age, :integer
     field :active, :boolean
+    embeds_one :address, TestApp.Address
+    embeds_many :social_links, TestApp.SocialLink
     timestamps(type: :utc_datetime)
   end
 end
@@ -24,6 +26,25 @@ defmodule TestApp.Post do
     belongs_to :author, TestApp.User
     has_many :comments, TestApp.Comment
     timestamps(type: :utc_datetime)
+  end
+end
+
+defmodule TestApp.Address do
+  use Ecto.Schema
+
+  embedded_schema do
+    field :street, :string
+    field :city, :string
+    field :zip, :string
+  end
+end
+
+defmodule TestApp.SocialLink do
+  use Ecto.Schema
+
+  embedded_schema do
+    field :platform, :string
+    field :url, :string
   end
 end
 

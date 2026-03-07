@@ -1,5 +1,21 @@
 # Changelog
 
+## v0.3.0
+
+### New Features
+
+- **`@field_types` annotation** — Annotate computed fields with Ecto types:
+  `@field_types reading_time: :integer, full_name: :string`. Resolves fields that aren't
+  backed by an Ecto schema column.
+
+- **Embedded schemas** — `embeds_one` generates an inline object schema with all embedded
+  fields. `embeds_many` generates an array of inline objects. Works in both OpenAPI and
+  TypeScript output.
+
+- **Response status code inference** — Detects `put_status(:created)` and
+  `send_resp(conn, :no_content, "")` in controller source to generate correct response codes
+  (201, 204, etc.). Falls back to sensible defaults: `create` → 201, `delete` → 204.
+
 ## v0.2.0
 
 ### New Features

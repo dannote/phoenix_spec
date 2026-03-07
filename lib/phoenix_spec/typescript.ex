@@ -45,6 +45,14 @@ defmodule PhoenixSpec.TypeScript do
 
   defp field_to_ts_type(%Field{items_ref: ref}) when is_binary(ref), do: "#{ref}[]"
 
+  defp field_to_ts_type(%Field{type: %{type: "embedded", cardinality: :one, schema: schema}}) do
+    embedded_to_ts(schema)
+  end
+
+  defp field_to_ts_type(%Field{type: %{type: "embedded", cardinality: :many, schema: schema}}) do
+    "#{embedded_to_ts(schema)}[]"
+  end
+
   defp field_to_ts_type(%Field{type: %{type: "array", items: %{type: inner_type}}}) do
     "#{openapi_to_ts(inner_type)}[]"
   end
@@ -59,6 +67,20 @@ defmodule PhoenixSpec.TypeScript do
 
   defp field_to_ts_type(%Field{}), do: "unknown"
 
+  defp embedded_to_ts(schema) do
+    fields = schema.__schema__(:fields) -- [:id]
+
+    props =
+      Enum.map_join(fields, " ", fn field ->
+        type = schema.__schema__(:type, field)
+        ts = openapi_to_ts(PhoenixSpec.TypeMapping.to_openapi(type))
+        "#{field}: #{ts};"
+      end)
+
+    "{ #{props} }"
+  end
+
+  defp openapi_to_ts(%{type: type}), do: openapi_to_ts(type)
   defp openapi_to_ts("string"), do: "string"
   defp openapi_to_ts("integer"), do: "number"
   defp openapi_to_ts("number"), do: "number"

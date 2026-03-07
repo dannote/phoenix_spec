@@ -92,6 +92,52 @@ defmodule PhoenixSpec.OpenAPITest do
     assert schema.properties[:published] == %{type: "boolean"}
   end
 
+  test "create action returns 201 status", %{spec: spec} do
+    post_op = spec.paths["/api/posts"]["post"]
+    assert Map.has_key?(post_op.responses, "201")
+    refute Map.has_key?(post_op.responses, "200")
+    assert post_op.responses["201"].description == "Created"
+  end
+
+  test "delete action returns 204 with no content", %{spec: spec} do
+    delete_op = spec.paths["/api/posts/{id}"]["delete"]
+    assert Map.has_key?(delete_op.responses, "204")
+    assert delete_op.responses["204"].description == "No Content"
+    refute Map.has_key?(delete_op.responses["204"], :content)
+  end
+
+  test "update action returns 200", %{spec: spec} do
+    put_op = spec.paths["/api/posts/{id}"]["put"]
+    assert Map.has_key?(put_op.responses, "200")
+  end
+
+  test "embedded_one generates inline object schema", %{spec: spec} do
+    user_detail = spec.components.schemas["UserDetail"]
+    address = user_detail.properties[:address]
+
+    assert address.type == "object"
+    assert address.properties[:street] == %{type: "string"}
+    assert address.properties[:city] == %{type: "string"}
+    assert address.properties[:zip] == %{type: "string"}
+  end
+
+  test "embedded_many generates array of inline objects", %{spec: spec} do
+    user_detail = spec.components.schemas["UserDetail"]
+    links = user_detail.properties[:social_links]
+
+    assert links.type == "array"
+    assert links.items.type == "object"
+    assert links.items.properties[:platform] == %{type: "string"}
+    assert links.items.properties[:url] == %{type: "string"}
+  end
+
+  test "@field_types annotation resolves computed field types in schema", %{spec: spec} do
+    user_detail = spec.components.schemas["UserDetail"]
+
+    assert user_detail.properties[:reading_time] == %{type: "integer"}
+    assert user_detail.properties[:avatar_url] == %{type: "string"}
+  end
+
   test "serializes to valid JSON", %{spec: spec} do
     json = OpenAPI.to_json(spec)
     assert {:ok, decoded} = Jason.decode(json)

@@ -53,6 +53,7 @@ defmodule TestAppWeb.UserDetailJSON do
   alias TestApp.User
 
   @optional [:age, :avatar_url]
+  @field_types reading_time: :integer, avatar_url: :string
 
   def show(%{user: user}) do
     %{data: data(user)}
@@ -64,9 +65,14 @@ defmodule TestAppWeb.UserDetailJSON do
       name: user.name,
       email: user.email,
       age: user.age,
-      avatar_url: if(user.active, do: "/avatars/#{user.id}", else: nil)
+      address: user.address,
+      social_links: user.social_links,
+      avatar_url: if(user.active, do: "/avatars/#{user.id}", else: nil),
+      reading_time: calculate_reading_time(user)
     }
   end
+
+  defp calculate_reading_time(_user), do: 5
 end
 
 defmodule TestAppWeb.CommentJSON do

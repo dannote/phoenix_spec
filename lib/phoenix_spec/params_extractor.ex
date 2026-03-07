@@ -31,19 +31,9 @@ defmodule PhoenixSpec.ParamsExtractor do
   """
   @spec extract(module()) :: %{atom() => ParamsInfo.t()}
   def extract(controller) do
-    with {:ok, source_path} <- source_path(controller),
-         {:ok, source} <- File.read(source_path),
-         {:ok, ast} <- Code.string_to_quoted(source) do
-      extract_from_ast(controller, ast)
-    else
-      _ -> %{}
-    end
-  end
-
-  defp source_path(module) do
-    case module.module_info(:compile)[:source] do
-      nil -> :error
-      source -> {:ok, List.to_string(source)}
+    case AstHelpers.parse_module_source(controller) do
+      {:ok, _module, ast} -> extract_from_ast(controller, ast)
+      :error -> %{}
     end
   end
 

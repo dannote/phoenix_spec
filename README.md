@@ -106,8 +106,12 @@ PhoenixSpec generates:
 | `%{data: for(...)}` in `index/1` | wrapped array response |
 | `%{data: data(post)}` in `show/1` | wrapped object response |
 | Route `get "/posts/:id"` | path parameter `{id}` |
+| `user.address` (`embeds_one`) | inline object schema |
+| `user.links` (`embeds_many`) | array of inline objects |
 | `if(cond, do: val)` in map value | optional field |
 | `Ecto.Changeset.cast(struct, params, [:f1, :f2])` | request body schema |
+| `put_status(conn, :created)` | 201 response code |
+| `send_resp(conn, :no_content, "")` | 204 response code |
 
 ### Ecto type mapping
 
@@ -125,6 +129,8 @@ PhoenixSpec generates:
 | `:map` | `object` |
 | `{:array, :string}` | `array` of `string` |
 | `Ecto.Enum` | `string` with `enum` values |
+| `embeds_one` | inline `object` with embedded schema fields |
+| `embeds_many` | `array` of inline `object` |
 
 ## Optional Fields
 
@@ -146,6 +152,69 @@ defmodule MyAppWeb.UserJSON do
   end
 end
 ```
+
+## Field Type Annotations
+
+Computed fields (not backed by an Ecto schema field) default to `unknown`. Annotate them with `@field_types`:
+
+```elixir
+defmodule MyAppWeb.PostJSON do
+  @field_types reading_time: :integer, full_name: :string
+
+  def data(%Post{} = post) do
+    %{
+      id: post.id,
+      title: post.title,
+      reading_time: div(String.length(post.body), 200),
+      full_name: "#{post.author.first} #{post.author.last}"
+    }
+  end
+end
+```
+
+Any Ecto type works: `:string`, `:integer`, `:boolean`, `:float`, `{:array, :string}`, etc.
+
+## Embedded Schemas
+
+`embeds_one` and `embeds_many` are rendered as inline object schemas:
+
+```json
+{
+  "address": {
+    "type": "object",
+    "required": ["city", "street", "zip"],
+    "properties": {
+      "street": { "type": "string" },
+      "city": { "type": "string" },
+      "zip": { "type": "string" }
+    }
+  },
+  "social_links": {
+    "type": "array",
+    "items": {
+      "type": "object",
+      "properties": {
+        "platform": { "type": "string" },
+        "url": { "type": "string" }
+      }
+    }
+  }
+}
+```
+
+## Response Status Codes
+
+PhoenixSpec infers status codes from your controller source:
+
+| Pattern | Status |
+|---|---|
+| `put_status(conn, :created)` | `201` |
+| `send_resp(conn, :no_content, "")` | `204` |
+| `create` action (default) | `201` |
+| `delete` action (default) | `204` |
+| Everything else | `200` |
+
+Custom status codes set via `put_status` or `send_resp` in the controller body take precedence over defaults.
 
 ## Request Bodies
 
@@ -256,9 +325,11 @@ mix phoenix_spec.gen \
 - [x] Request body schemas from controller params
 - [x] TypeScript `.d.ts` output
 - [x] Mix compiler integration (auto-regenerate)
-- [ ] `@spec` annotation support for computed fields
-- [ ] Embedded schemas
-- [ ] Multiple response codes per action
+- [x] `@field_types` annotation for computed fields
+- [x] Embedded schemas (`embeds_one` / `embeds_many`)
+- [x] Response status code inference from controller AST
+- [ ] Error response schemas (422, 404)
+- [ ] Polymorphic associations / `oneOf`
 
 ## License
 

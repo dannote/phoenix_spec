@@ -32,5 +32,13 @@ defmodule PhoenixSpec.TypeMapping do
     %{type: "string", enum: values}
   end
 
+  def to_openapi({:parameterized, {Ecto.Embedded, %{cardinality: :one, related: schema}}}) do
+    %{type: "embedded", cardinality: :one, schema: schema}
+  end
+
+  def to_openapi({:parameterized, {Ecto.Embedded, %{cardinality: :many, related: schema}}}) do
+    %{type: "embedded", cardinality: :many, schema: schema}
+  end
+
   def to_openapi(_unknown), do: %{}
 end

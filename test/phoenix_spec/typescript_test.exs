@@ -44,8 +44,20 @@ defmodule PhoenixSpec.TypeScriptTest do
     assert ts =~ "tags: string[];"
   end
 
+  test "embedded_one generates inline object type", %{ts: ts} do
+    assert ts =~ "address: { street: string; city: string; zip: string; };"
+  end
+
+  test "embedded_many generates inline object array type", %{ts: ts} do
+    assert ts =~ "social_links: { platform: string; url: string; }[];"
+  end
+
+  test "@field_types resolves computed field types", %{ts: ts} do
+    assert ts =~ "reading_time: number;"
+  end
+
   test "optional fields use ? syntax", %{ts: ts} do
     assert ts =~ "age?: number;"
-    assert ts =~ "avatar_url?: unknown;"
+    assert ts =~ "avatar_url?: string;"
   end
 end
