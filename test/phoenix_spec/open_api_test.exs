@@ -79,9 +79,17 @@ defmodule PhoenixSpec.OpenAPITest do
     assert param.required == true
   end
 
-  test "create paths have POST", %{spec: spec} do
+  test "create paths have POST with request body", %{spec: spec} do
     post_op = spec.paths["/api/posts"]["post"]
     assert post_op.operationId == "post_create"
+
+    request_body = post_op.requestBody
+    assert request_body.required == true
+
+    schema = request_body.content["application/json"].schema
+    assert schema.type == "object"
+    assert schema.properties[:title] == %{type: "string"}
+    assert schema.properties[:published] == %{type: "boolean"}
   end
 
   test "serializes to valid JSON", %{spec: spec} do

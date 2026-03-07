@@ -1,6 +1,24 @@
 defmodule TestAppWeb.PostController do
+  alias TestApp.Post
+
   def init(opts), do: opts
   def call(conn, _opts), do: conn
+
+  def create(conn, %{"post" => post_params}) do
+    changeset =
+      %Post{}
+      |> Ecto.Changeset.cast(post_params, [:title, :body, :published])
+
+    conn
+  end
+
+  def update(conn, %{"id" => id, "post" => post_params}) do
+    changeset =
+      %Post{}
+      |> Ecto.Changeset.cast(post_params, [:title, :body])
+
+    conn
+  end
 end
 
 defmodule TestAppWeb.UserController do

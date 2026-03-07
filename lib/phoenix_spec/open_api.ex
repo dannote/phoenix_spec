@@ -3,7 +3,7 @@ defmodule PhoenixSpec.OpenAPI do
   Generates an OpenAPI 3.1 specification from extracted view and schema information.
   """
 
-  alias PhoenixSpec.{Discovery, ViewExtractor}
+  alias PhoenixSpec.{Discovery, ParamsExtractor, ViewExtractor}
   alias PhoenixSpec.ViewExtractor.{ViewInfo, Field}
 
   @doc """
@@ -18,8 +18,10 @@ defmodule PhoenixSpec.OpenAPI do
 
     json_views = Discovery.json_views_from_router(router)
     view_infos = Enum.map(json_views, &ViewExtractor.extract/1) |> Enum.reject(&is_nil/1)
+    controllers = extract_controllers(router)
+    params_map = extract_all_params(controllers)
     schemas = build_schemas(view_infos)
-    paths = build_paths(router, view_infos)
+    paths = build_paths(router, view_infos, params_map)
 
     spec = %{
       openapi: "3.1.0",
@@ -81,7 +83,19 @@ defmodule PhoenixSpec.OpenAPI do
     %{}
   end
 
-  defp build_paths(router, view_infos) do
+  defp extract_controllers(router) do
+    router.__routes__()
+    |> Enum.map(& &1.plug)
+    |> Enum.uniq()
+  end
+
+  defp extract_all_params(controllers) do
+    Map.new(controllers, fn controller ->
+      {controller, ParamsExtractor.extract(controller)}
+    end)
+  end
+
+  defp build_paths(router, view_infos, params_map) do
     view_map = build_view_lookup(view_infos)
 
     router.__routes__()
@@ -89,7 +103,7 @@ defmodule PhoenixSpec.OpenAPI do
     |> Enum.group_by(& &1.path)
     |> Enum.map(fn {path, routes} ->
       openapi_path = phoenix_path_to_openapi(path)
-      operations = build_operations(routes, view_map)
+      operations = build_operations(routes, view_map, params_map)
       {openapi_path, operations}
     end)
     |> Enum.into(%{})
@@ -106,15 +120,15 @@ defmodule PhoenixSpec.OpenAPI do
     String.contains?(module_name, "Controller")
   end
 
-  defp build_operations(routes, view_map) do
+  defp build_operations(routes, view_map, params_map) do
     Map.new(routes, fn route ->
       verb = route_verb(route)
-      operation = build_operation(route, view_map)
+      operation = build_operation(route, view_map, params_map)
       {verb, operation}
     end)
   end
 
-  defp build_operation(route, view_map) do
+  defp build_operation(route, view_map, params_map) do
     action = route.plug_opts
     controller = route.plug
     json_view = controller_to_json_view(controller)
@@ -125,13 +139,46 @@ defmodule PhoenixSpec.OpenAPI do
       responses: build_responses(action, view_info)
     }
 
-    params = extract_path_params(route.path)
+    path_params = extract_path_params(route.path)
 
-    if params == [] do
-      operation
+    operation =
+      if path_params == [] do
+        operation
+      else
+        Map.put(operation, :parameters, path_params)
+      end
+
+    controller_params = get_in(params_map, [controller, action])
+
+    if controller_params && controller_params.fields != [] do
+      Map.put(operation, :requestBody, build_request_body(controller_params))
     else
-      Map.put(operation, :parameters, params)
+      operation
     end
+  end
+
+  defp build_request_body(params_info) do
+    properties =
+      Map.new(params_info.fields, fn field ->
+        name = if is_atom(field.name), do: field.name, else: String.to_atom(field.name)
+        {name, field.type}
+      end)
+
+    required =
+      params_info.fields
+      |> Enum.map(fn field ->
+        if is_atom(field.name), do: field.name, else: String.to_atom(field.name)
+      end)
+      |> Enum.sort()
+
+    schema = %{type: "object", properties: properties, required: required}
+
+    %{
+      required: true,
+      content: %{
+        "application/json" => %{schema: schema}
+      }
+    }
   end
 
   defp build_responses(action, nil) do
