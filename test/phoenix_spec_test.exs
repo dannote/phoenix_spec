@@ -1,8 +1,4 @@
 defmodule PhoenixSpecTest do
-  use ExUnit.Case
-  doctest PhoenixSpec
-
-  test "greets the world" do
-    assert PhoenixSpec.hello() == :world
-  end
+  use ExUnit.Case, async: true
+  doctest PhoenixSpec.ViewExtractor
 end
