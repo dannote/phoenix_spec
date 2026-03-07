@@ -1,6 +1,5 @@
 # PhoenixSpec
 
-[![Hex.pm](https://img.shields.io/hexpm/v/phoenix_spec.svg)](https://hex.pm/packages/phoenix_spec)
 [![CI](https://github.com/dannote/phoenix_spec/actions/workflows/ci.yml/badge.svg)](https://github.com/dannote/phoenix_spec/actions)
 
 Automatically generate [OpenAPI 3.1](https://spec.openapis.org/oas/v3.1.0) specifications from your Phoenix JSON views and Ecto schemas. No DSL to learn, no schemas to duplicate.
@@ -94,28 +93,26 @@ PhoenixSpec generates:
 
 ### Automatically detected
 
-| Pattern | Inferred as |
+| Pattern | OpenAPI |
 |---|---|
-| `post.title` where `title` is `:string` in Ecto | `{type: "string"}` |
+| `post.title` (`:string` in Ecto) | `{type: "string"}` |
 | `post.id` (primary key) | `{type: "integer"}` |
 | `post.published_at` (`:utc_datetime`) | `{type: "string", format: "date-time"}` |
 | `post.status` (`Ecto.Enum`) | `{type: "string", enum: [...]}` |
 | `post.tags` (`{:array, :string}`) | `{type: "array", items: {type: "string"}}` |
-| `cost.amount` (through `belongs_to :cost`) | resolved from associated schema |
-| `MyAppWeb.UserJSON.data(post.author)` | `$ref` to User schema |
-| `for(c <- comments, do: CommentJSON.data(c))` | array of `$ref` |
+| `comment.user.name` (through `belongs_to`) | resolved from associated schema |
+| `UserJSON.data(post.author)` | `$ref` to User schema |
+| `for(c <- cs, do: CommentJSON.data(c))` | array of `$ref` |
 | `%{data: for(...)}` in `index/1` | wrapped array response |
 | `%{data: data(post)}` in `show/1` | wrapped object response |
-| `%{name: x, email: y}` inline map literal | inline `object` with typed properties |
+| `%{name: x, email: y}` inline map | inline object with typed properties |
 | Route `get "/posts/:id"` | path parameter `{id}` |
 | `user.address` (`embeds_one`) | inline object schema |
 | `user.links` (`embeds_many`) | array of inline objects |
-| `if(cond, do: val)` in map value | optional field |
-| `Ecto.Changeset.cast(struct, params, [:f1, :f2])` | request body schema |
+| `if(cond, do: val)` in map value | optional field (not in `required`) |
+| `cast(struct, params, [:f1, :f2])` | typed request body schema |
 | `put_status(conn, :created)` | 201 response code |
 | `send_resp(conn, :no_content, "")` | 204 response code |
-| `create` action | 422 error response |
-| `show` / `update` / `delete` action | 404 error response |
 | Multiple `data/1` with different structs | `oneOf` schema |
 
 ### Ecto type mapping
@@ -124,14 +121,17 @@ PhoenixSpec generates:
 |---|---|
 | `:string` | `string` |
 | `:integer` | `integer` |
-| `:float` | `number` (double) |
+| `:float` | `number` (format: double) |
 | `:boolean` | `boolean` |
-| `:decimal` | `string` (decimal) |
+| `:decimal` | `string` (format: decimal) |
 | `:id` | `integer` |
-| `:binary_id` | `string` (uuid) |
-| `:date` | `string` (date) |
-| `:utc_datetime` / `:naive_datetime` | `string` (date-time) |
+| `:binary_id` | `string` (format: uuid) |
+| `:date` | `string` (format: date) |
+| `:time` | `string` (format: time) |
+| `:utc_datetime` / `:naive_datetime` | `string` (format: date-time) |
+| `:utc_datetime_usec` / `:naive_datetime_usec` | `string` (format: date-time) |
 | `:map` | `object` |
+| `:binary` | `string` (format: binary) |
 | `{:array, :string}` | `array` of `string` |
 | `Ecto.Enum` | `string` with `enum` values |
 | `embeds_one` | inline `object` with embedded schema fields |
@@ -219,13 +219,20 @@ PhoenixSpec infers status codes from your controller source:
 | `delete` action (default) | `204` |
 | Everything else | `200` |
 
-Custom status codes set via `put_status` or `send_resp` in the controller body take precedence over defaults.
+Custom status codes set via `put_status` or `send_resp` take precedence over defaults.
+
+Error responses are added automatically:
+
+| Action | Error responses |
+|---|---|
+| `show`, `update`, `delete` | `404 Not Found` |
+| `create`, `update` | `422 Unprocessable Entity` with error schema |
 
 ## Request Bodies
 
 PhoenixSpec detects `Ecto.Changeset.cast/3` calls to build typed request body schemas. It handles two patterns:
 
-**Direct cast in controller** (custom controllers):
+**Direct cast in controller:**
 
 ```elixir
 def create(conn, %{"post" => post_params}) do
@@ -236,28 +243,25 @@ end
 **Delegation via context module** (standard `phx.gen.json` pattern):
 
 ```elixir
-# Controller
 def create(conn, %{"post" => post_params}) do
   with {:ok, %Post{} = post} <- Blog.create_post(post_params) do ...
-
-# Schema — PhoenixSpec finds cast/3 here automatically
-def changeset(post, attrs) do
-  post |> cast(attrs, [:title, :body, :published]) |> validate_required([:title])
-end
 ```
 
-Both produce a properly nested request body:
+When the controller references a `%Post{}` struct, PhoenixSpec looks up `Post.changeset/2` to find the `cast/3` field list. Both patterns produce a nested request body matching Phoenix conventions:
 
 ```json
 {
   "requestBody": {
+    "required": true,
     "content": {
       "application/json": {
         "schema": {
           "type": "object",
+          "required": ["post"],
           "properties": {
             "post": {
               "type": "object",
+              "required": ["body", "published", "title"],
               "properties": {
                 "title": { "type": "string" },
                 "body": { "type": "string" },
@@ -279,11 +283,11 @@ When `data/1` has multiple clauses matching different structs, PhoenixSpec gener
 ```elixir
 defmodule MyAppWeb.MessageJSON do
   def data(%TextMessage{} = msg) do
-    %{id: msg.id, type: "text", text: msg.text, sender: msg.sender}
+    %{id: msg.id, text: msg.text, sender: msg.sender}
   end
 
   def data(%ImageMessage{} = msg) do
-    %{id: msg.id, type: "image", url: msg.url, width: msg.width, height: msg.height, sender: msg.sender}
+    %{id: msg.id, url: msg.url, width: msg.width, height: msg.height, sender: msg.sender}
   end
 end
 ```
@@ -406,27 +410,6 @@ mix phoenix_spec.gen \
 | `--title` | App name | API title in the spec |
 | `--version` | `1.0.0` | API version |
 | `--format` | `json` | `json`, `yaml`, or `ts` |
-
-## Roadmap
-
-- [x] Ecto schema type inference
-- [x] JSON view AST extraction
-- [x] Nested view / `$ref` detection
-- [x] Router → OpenAPI paths
-- [x] Mix task
-- [x] Ecto.Enum value extraction
-- [x] Conditional / optional field detection
-- [x] Request body schemas from controller/schema changeset
-- [x] TypeScript `.d.ts` output
-- [x] Mix compiler integration (auto-regenerate)
-- [x] `@field_types` annotation for computed fields
-- [x] Embedded schemas (`embeds_one` / `embeds_many`)
-- [x] Response status code inference from controller AST
-- [x] Error response schemas (404, 422)
-- [x] Association traversal (`post.author.name`)
-- [x] Inline map literals as object schemas
-- [x] Operation summaries and unique operationIds
-- [x] Polymorphic views / `oneOf`
 
 ## License
 

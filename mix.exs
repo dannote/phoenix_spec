@@ -15,8 +15,9 @@ defmodule PhoenixSpec.MixProject do
       docs: docs(),
       name: "PhoenixSpec",
       description:
-        "Automatically generate OpenAPI 3.1 specs from Phoenix JSON views and Ecto schemas",
+        "Automatically generate OpenAPI 3.1 specs from Phoenix JSON views and Ecto schemas — zero annotations required",
       source_url: @source_url,
+      homepage_url: @source_url,
       elixirc_paths: elixirc_paths(Mix.env()),
       aliases: aliases(),
       dialyzer: [
@@ -56,7 +57,7 @@ defmodule PhoenixSpec.MixProject do
     [
       licenses: ["MIT"],
       links: %{"GitHub" => @source_url},
-      files: ~w(lib mix.exs README.md LICENSE CHANGELOG.md)
+      files: ~w(lib .formatter.exs mix.exs README.md LICENSE CHANGELOG.md)
     ]
   end
 
@@ -75,9 +76,11 @@ defmodule PhoenixSpec.MixProject do
 
   defp docs do
     [
-      main: "PhoenixSpec",
+      main: "readme",
       source_url: @source_url,
-      source_ref: "v#{@version}"
+      source_ref: "v#{@version}",
+      extras: ["README.md", "CHANGELOG.md", "LICENSE"],
+      formatters: ["html"]
     ]
   end
 end

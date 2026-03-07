@@ -1,5 +1,9 @@
 defmodule PhoenixSpec.StatusExtractor do
-  @moduledoc false
+  @moduledoc """
+  Extracts HTTP response status codes from Phoenix controller actions.
+
+  Detects `put_status/2` and `send_resp/3` calls in controller source.
+  """
 
   alias PhoenixSpec.AstHelpers
 

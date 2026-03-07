@@ -15,7 +15,7 @@ defmodule PhoenixSpec.Compiler do
 
   ## Configuration
 
-  Configure in `config/config.exs`:
+  Configure in `config/dev.exs`:
 
       config :phoenix_spec,
         router: MyAppWeb.Router,

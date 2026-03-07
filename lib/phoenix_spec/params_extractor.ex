@@ -3,11 +3,9 @@ defmodule PhoenixSpec.ParamsExtractor do
   Extracts request body schemas from Phoenix controller actions.
 
   Detects patterns like:
-  - `params["key"]` or `params[:key]` access
-  - `Map.get(params, "key")`
   - Pattern matching `%{"key" => value}` in function args
-  - Changeset-based: `cast(struct, params, [:field1, :field2])`
-  - Permit-style: extracting known keys from params
+  - `Ecto.Changeset.cast(struct, params, [:field1, :field2])` in controller or schema changeset
+  - Wrapper key nesting (e.g. `%{"post" => post_params}` wraps fields under `"post"`)
   """
 
   alias PhoenixSpec.{AstHelpers, SchemaResolver}

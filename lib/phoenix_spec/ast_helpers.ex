@@ -1,5 +1,7 @@
 defmodule PhoenixSpec.AstHelpers do
-  @moduledoc false
+  @moduledoc """
+  Shared AST utilities for parsing Elixir source files.
+  """
 
   @spec find_module_ast(Macro.t(), module()) :: Macro.t() | nil
   def find_module_ast(ast, target_module) do
