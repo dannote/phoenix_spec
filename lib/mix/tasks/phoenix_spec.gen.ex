@@ -107,47 +107,6 @@ defmodule Mix.Tasks.PhoenixSpec.Gen do
   defp default_output("ts"), do: "priv/static/api.d.ts"
   defp default_output(_), do: "priv/static/openapi.json"
 
-  defp encode(spec, "yaml") do
-    if Code.ensure_loaded?(YamlElixir) do
-      # yaml_elixir only reads YAML; for writing we do a simple conversion
-      spec |> Jason.encode!() |> Jason.decode!() |> yaml_encode()
-    else
-      Mix.raise("Add {:yaml_elixir, \"~> 2.9\"} to your deps for YAML output")
-    end
-  end
-
-  defp encode(spec, _json) do
-    PhoenixSpec.OpenAPI.to_json(spec)
-  end
-
-  defp yaml_encode(data), do: to_yaml(data, 0)
-
-  defp to_yaml(map, indent) when is_map(map) do
-    map
-    |> Enum.map(fn {key, value} ->
-      prefix = String.duplicate("  ", indent)
-
-      case value do
-        v when is_map(v) and map_size(v) > 0 ->
-          "#{prefix}#{key}:\n#{to_yaml(v, indent + 1)}"
-
-        v when is_list(v) ->
-          items = Enum.map_join(v, "\n", &"#{prefix}  - #{to_yaml_inline(&1)}")
-          "#{prefix}#{key}:\n#{items}"
-
-        _ ->
-          "#{prefix}#{key}: #{to_yaml_value(value)}"
-      end
-    end)
-    |> Enum.join("\n")
-  end
-
-  defp to_yaml_value(nil), do: "null"
-  defp to_yaml_value(true), do: "true"
-  defp to_yaml_value(false), do: "false"
-  defp to_yaml_value(v) when is_binary(v), do: inspect(v)
-  defp to_yaml_value(v), do: "#{v}"
-
-  defp to_yaml_inline(v) when is_binary(v), do: inspect(v)
-  defp to_yaml_inline(v), do: "#{v}"
+  defp encode(spec, "yaml"), do: PhoenixSpec.OpenAPI.to_yaml(spec)
+  defp encode(spec, _json), do: PhoenixSpec.OpenAPI.to_json(spec)
 end

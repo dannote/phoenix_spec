@@ -281,4 +281,43 @@ defmodule PhoenixSpec.OpenAPI do
   def to_json(spec) do
     Jason.encode!(spec, pretty: true)
   end
+
+  @doc """
+  Encodes the spec as YAML.
+  """
+  @spec to_yaml(map()) :: String.t()
+  def to_yaml(spec) do
+    spec |> Jason.encode!() |> Jason.decode!() |> yaml_encode()
+  end
+
+  defp yaml_encode(data), do: to_yaml_str(data, 0)
+
+  defp to_yaml_str(map, indent) when is_map(map) do
+    map
+    |> Enum.map(fn {key, value} ->
+      prefix = String.duplicate("  ", indent)
+
+      case value do
+        v when is_map(v) and map_size(v) > 0 ->
+          "#{prefix}#{key}:\n#{to_yaml_str(v, indent + 1)}"
+
+        v when is_list(v) ->
+          items = Enum.map_join(v, "\n", &"#{prefix}  - #{to_yaml_inline(&1)}")
+          "#{prefix}#{key}:\n#{items}"
+
+        _ ->
+          "#{prefix}#{key}: #{to_yaml_value(value)}"
+      end
+    end)
+    |> Enum.join("\n")
+  end
+
+  defp to_yaml_value(nil), do: "null"
+  defp to_yaml_value(true), do: "true"
+  defp to_yaml_value(false), do: "false"
+  defp to_yaml_value(v) when is_binary(v), do: inspect(v)
+  defp to_yaml_value(v), do: "#{v}"
+
+  defp to_yaml_inline(v) when is_binary(v), do: inspect(v)
+  defp to_yaml_inline(v), do: "#{v}"
 end
