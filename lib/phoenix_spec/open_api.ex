@@ -153,7 +153,10 @@ defmodule PhoenixSpec.OpenAPI do
           end
 
         status = if action == :create, do: "201", else: "200"
-        %{status => %{description: "Success", content: %{"application/json" => %{schema: schema}}}}
+
+        %{
+          status => %{description: "Success", content: %{"application/json" => %{schema: schema}}}
+        }
 
       %{wrapper_key: wrapper_key, list: false} ->
         ref_schema = %{"$ref": "#/components/schemas/#{schema_name}"}
@@ -166,7 +169,10 @@ defmodule PhoenixSpec.OpenAPI do
           end
 
         status = if action == :create, do: "201", else: "200"
-        %{status => %{description: "Success", content: %{"application/json" => %{schema: schema}}}}
+
+        %{
+          status => %{description: "Success", content: %{"application/json" => %{schema: schema}}}
+        }
 
       nil ->
         %{"200" => %{description: "Success", content: default_content(action)}}

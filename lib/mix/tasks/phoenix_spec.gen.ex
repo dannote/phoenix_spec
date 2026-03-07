@@ -58,9 +58,7 @@ defmodule Mix.Tasks.PhoenixSpec.Gen do
     schema_count = map_size(spec.components.schemas)
     path_count = map_size(spec.paths)
 
-    Mix.shell().info(
-      "Generated #{output} (#{schema_count} schemas, #{path_count} paths)"
-    )
+    Mix.shell().info("Generated #{output} (#{schema_count} schemas, #{path_count} paths)")
   end
 
   defp resolve_router(opts) do

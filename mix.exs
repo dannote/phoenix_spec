@@ -14,7 +14,8 @@ defmodule PhoenixSpec.MixProject do
       package: package(),
       docs: docs(),
       name: "PhoenixSpec",
-      description: "Automatically generate OpenAPI 3.1 specs from Phoenix JSON views and Ecto schemas",
+      description:
+        "Automatically generate OpenAPI 3.1 specs from Phoenix JSON views and Ecto schemas",
       source_url: @source_url,
       elixirc_paths: elixirc_paths(Mix.env())
     ]

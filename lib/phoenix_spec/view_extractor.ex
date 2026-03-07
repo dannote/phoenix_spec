@@ -290,7 +290,7 @@ defmodule PhoenixSpec.ViewExtractor do
     end)
   end
 
-  defp analyze_action_body([do: body]), do: analyze_action_body(body)
+  defp analyze_action_body(do: body), do: analyze_action_body(body)
 
   defp analyze_action_body({:%{}, _, pairs}) do
     case pairs do
