@@ -27,6 +27,26 @@ defmodule PhoenixSpec.TypeScript do
     header <> Enum.join(interfaces, "\n\n") <> "\n"
   end
 
+  defp view_to_interface(%ViewInfo{module: module, variants: variants})
+       when variants != [] do
+    name = ViewExtractor.view_module_to_schema_name(module)
+
+    variant_interfaces =
+      variants
+      |> Enum.with_index()
+      |> Enum.map(fn {%{fields: fields}, idx} ->
+        variant_name = "#{name}Variant#{idx + 1}"
+        props = Enum.map_join(fields, "\n", &field_to_property/1)
+        {"export interface #{variant_name} {\n#{props}\n}", variant_name}
+      end)
+
+    interfaces = Enum.map_join(variant_interfaces, "\n\n", &elem(&1, 0))
+    variant_names = Enum.map_join(variant_interfaces, " | ", &elem(&1, 1))
+    type_alias = "export type #{name} = #{variant_names};"
+
+    "#{interfaces}\n\n#{type_alias}"
+  end
+
   defp view_to_interface(%ViewInfo{module: module, fields: fields}) do
     name = ViewExtractor.view_module_to_schema_name(module)
     props = Enum.map_join(fields, "\n", &field_to_property/1)

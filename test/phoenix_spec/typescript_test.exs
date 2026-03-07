@@ -60,4 +60,10 @@ defmodule PhoenixSpec.TypeScriptTest do
     assert ts =~ "age?: number;"
     assert ts =~ "avatar_url?: string;"
   end
+
+  test "polymorphic views generate union type", %{ts: ts} do
+    assert ts =~ "export interface MessageVariant1 {"
+    assert ts =~ "export interface MessageVariant2 {"
+    assert ts =~ "export type Message = MessageVariant1 | MessageVariant2;"
+  end
 end

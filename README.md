@@ -116,6 +116,7 @@ PhoenixSpec generates:
 | `send_resp(conn, :no_content, "")` | 204 response code |
 | `create` action | 422 error response |
 | `show` / `update` / `delete` action | 404 error response |
+| Multiple `data/1` with different structs | `oneOf` schema |
 
 ### Ecto type mapping
 
@@ -271,6 +272,59 @@ Both produce a properly nested request body:
 }
 ```
 
+## Polymorphic Views
+
+When `data/1` has multiple clauses matching different structs, PhoenixSpec generates a `oneOf` schema:
+
+```elixir
+defmodule MyAppWeb.MessageJSON do
+  def data(%TextMessage{} = msg) do
+    %{id: msg.id, type: "text", text: msg.text, sender: msg.sender}
+  end
+
+  def data(%ImageMessage{} = msg) do
+    %{id: msg.id, type: "image", url: msg.url, width: msg.width, height: msg.height, sender: msg.sender}
+  end
+end
+```
+
+Generates:
+
+```json
+{
+  "Message": {
+    "oneOf": [
+      {
+        "type": "object",
+        "properties": {
+          "id": { "type": "integer" },
+          "text": { "type": "string" },
+          "sender": { "type": "string" }
+        }
+      },
+      {
+        "type": "object",
+        "properties": {
+          "id": { "type": "integer" },
+          "url": { "type": "string" },
+          "width": { "type": "integer" },
+          "height": { "type": "integer" },
+          "sender": { "type": "string" }
+        }
+      }
+    ]
+  }
+}
+```
+
+In TypeScript, this becomes a union type:
+
+```typescript
+export interface MessageVariant1 { id: number; text: string; sender: string; }
+export interface MessageVariant2 { id: number; url: string; width: number; height: number; sender: string; }
+export type Message = MessageVariant1 | MessageVariant2;
+```
+
 ## TypeScript Output
 
 Generate TypeScript type definitions instead of (or alongside) OpenAPI:
@@ -372,7 +426,7 @@ mix phoenix_spec.gen \
 - [x] Association traversal (`post.author.name`)
 - [x] Inline map literals as object schemas
 - [x] Operation summaries and unique operationIds
-- [ ] Polymorphic associations / `oneOf`
+- [x] Polymorphic views / `oneOf`
 
 ## License
 

@@ -42,9 +42,20 @@ defmodule PhoenixSpec.OpenAPI do
   defp build_schemas(view_infos) do
     Map.new(view_infos, fn %ViewInfo{} = info ->
       name = ViewExtractor.view_module_to_schema_name(info.module)
-      schema = fields_to_schema(info.fields)
+
+      schema =
+        if info.variants != [] do
+          variants_to_one_of(info.variants)
+        else
+          fields_to_schema(info.fields)
+        end
+
       {name, schema}
     end)
+  end
+
+  defp variants_to_one_of(variants) do
+    %{oneOf: Enum.map(variants, fn %{fields: fields} -> fields_to_schema(fields) end)}
   end
 
   defp fields_to_schema(fields) do

@@ -123,6 +123,40 @@ defmodule TestAppWeb.PostSummaryJSON do
   end
 end
 
+defmodule TestAppWeb.MessageJSON do
+  alias TestApp.ImageMessage
+  alias TestApp.TextMessage
+
+  def index(%{messages: messages}) do
+    %{data: for(message <- messages, do: data(message))}
+  end
+
+  def show(%{message: message}) do
+    %{data: data(message)}
+  end
+
+  def data(%TextMessage{} = msg) do
+    %{
+      id: msg.id,
+      type: "text",
+      text: msg.text,
+      sender: msg.sender
+    }
+  end
+
+  def data(%ImageMessage{} = msg) do
+    %{
+      id: msg.id,
+      type: "image",
+      url: msg.url,
+      alt_text: msg.alt_text,
+      width: msg.width,
+      height: msg.height,
+      sender: msg.sender
+    }
+  end
+end
+
 defmodule TestAppWeb.PostMetaJSON do
   alias TestApp.Post
 

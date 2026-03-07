@@ -190,6 +190,23 @@ defmodule PhoenixSpec.OpenAPITest do
     refute Map.has_key?(get_op.responses, "422")
   end
 
+  test "polymorphic data/1 generates oneOf schema", %{spec: spec} do
+    message = spec.components.schemas["Message"]
+
+    assert Map.has_key?(message, :oneOf)
+    assert length(message.oneOf) == 2
+
+    [text_schema, image_schema] = message.oneOf
+    assert text_schema.type == "object"
+    assert Map.has_key?(text_schema.properties, :text)
+    assert Map.has_key?(text_schema.properties, :sender)
+
+    assert image_schema.type == "object"
+    assert Map.has_key?(image_schema.properties, :url)
+    assert Map.has_key?(image_schema.properties, :width)
+    assert Map.has_key?(image_schema.properties, :height)
+  end
+
   test "serializes to valid JSON", %{spec: spec} do
     json = OpenAPI.to_json(spec)
     assert {:ok, decoded} = Jason.decode(json)

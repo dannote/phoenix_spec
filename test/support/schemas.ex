@@ -58,3 +58,26 @@ defmodule TestApp.Comment do
     timestamps(type: :utc_datetime)
   end
 end
+
+defmodule TestApp.TextMessage do
+  use Ecto.Schema
+
+  schema "text_messages" do
+    field :text, :string
+    field :sender, :string
+    timestamps(type: :utc_datetime)
+  end
+end
+
+defmodule TestApp.ImageMessage do
+  use Ecto.Schema
+
+  schema "image_messages" do
+    field :url, :string
+    field :alt_text, :string
+    field :width, :integer
+    field :height, :integer
+    field :sender, :string
+    timestamps(type: :utc_datetime)
+  end
+end

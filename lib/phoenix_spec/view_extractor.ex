@@ -29,13 +29,16 @@ defmodule PhoenixSpec.ViewExtractor do
 
   defmodule ViewInfo do
     @moduledoc false
-    defstruct [:module, :schema, :fields, :actions]
+    defstruct [:module, :schema, :fields, :actions, variants: []]
+
+    @type variant :: %{schema: module() | nil, fields: [Field.t()]}
 
     @type t :: %__MODULE__{
             module: module(),
             schema: module() | nil,
             fields: [Field.t()],
-            actions: %{atom() => action_info()}
+            actions: %{atom() => action_info()},
+            variants: [variant()]
           }
 
     @type action_info :: %{
@@ -63,14 +66,18 @@ defmodule PhoenixSpec.ViewExtractor do
     functions = collect_functions(body)
     optional_fields = collect_optional_attr(body)
     spec_types = collect_spec_attr(body)
-    {schema, fields} = extract_data_function(functions, aliases, optional_fields, spec_types)
+
+    {{schema, fields}, variants} =
+      extract_data_function(functions, aliases, optional_fields, spec_types)
+
     actions = extract_actions(functions)
 
     %ViewInfo{
       module: module,
       schema: schema,
       fields: fields,
-      actions: actions
+      actions: actions,
+      variants: variants
     }
   end
 
@@ -123,31 +130,65 @@ defmodule PhoenixSpec.ViewExtractor do
         optional_fields \\ MapSet.new(),
         spec_types \\ %{}
       ) do
-    data_fn =
-      Enum.find(functions, fn
+    data_fns =
+      Enum.filter(functions, fn
         {:defp, :data, _, _} -> true
         {:def, :data, _, _} -> true
         _ -> false
       end)
 
-    case data_fn do
-      {_, :data, args, body} ->
+    case data_fns do
+      [] ->
+        {result, []} =
+          extract_from_alternative_function(functions, aliases, optional_fields, spec_types)
+
+        {result, []}
+
+      [single] ->
+        {_, :data, args, body} = single
+
+        schema =
+          extract_schema_from_args(args, aliases) || infer_schema_from_aliases(aliases)
+
+        fields = extract_fields_from_body(body, schema, aliases, optional_fields, spec_types)
+        {{schema, fields}, []}
+
+      multiple ->
+        extract_polymorphic_data(multiple, aliases, optional_fields, spec_types)
+    end
+  end
+
+  defp extract_polymorphic_data(data_fns, aliases, optional_fields, spec_types) do
+    clause_data =
+      Enum.map(data_fns, fn {_, :data, args, body} ->
         schema =
           extract_schema_from_args(args, aliases) || infer_schema_from_aliases(aliases)
 
         fields = extract_fields_from_body(body, schema, aliases, optional_fields, spec_types)
         {schema, fields}
+      end)
+      |> Enum.reject(fn {_schema, fields} -> fields == [] end)
 
-      nil ->
-        extract_from_alternative_function(functions, aliases, optional_fields, spec_types)
+    schemas = Enum.map(clause_data, fn {schema, _} -> schema end) |> Enum.uniq()
+
+    if length(schemas) > 1 and Enum.all?(schemas, &(&1 != nil)) do
+      {first_schema, first_fields} = hd(clause_data)
+      variants = Enum.map(clause_data, fn {s, f} -> %{schema: s, fields: f} end)
+      {{first_schema, first_fields}, variants}
+    else
+      {first_schema, first_fields} = hd(clause_data)
+      {{first_schema, first_fields}, []}
     end
   end
 
   defp extract_from_alternative_function(functions, aliases, optional_fields, spec_types) do
-    with nil <- extract_from_named_function(functions, aliases, optional_fields, spec_types),
-         nil <- extract_from_action_inline(functions, aliases, optional_fields, spec_types) do
-      {nil, []}
-    end
+    result =
+      with nil <- extract_from_named_function(functions, aliases, optional_fields, spec_types),
+           nil <- extract_from_action_inline(functions, aliases, optional_fields, spec_types) do
+        {nil, []}
+      end
+
+    {result, []}
   end
 
   defp extract_from_named_function(functions, aliases, optional_fields, spec_types) do

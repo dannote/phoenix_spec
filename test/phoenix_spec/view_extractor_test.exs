@@ -172,4 +172,42 @@ defmodule PhoenixSpec.ViewExtractorTest do
     assert field_map[:stats].type.type == "object"
     assert field_map[:stats].type.properties.views == %{type: "integer"}
   end
+
+  describe "polymorphic views" do
+    test "detects multiple data/1 clauses as variants" do
+      info = ViewExtractor.extract(TestAppWeb.MessageJSON)
+
+      assert length(info.variants) == 2
+      assert info.schema == TestApp.TextMessage
+
+      [text_variant, image_variant] = info.variants
+      assert text_variant.schema == TestApp.TextMessage
+      assert image_variant.schema == TestApp.ImageMessage
+
+      text_fields = Map.new(text_variant.fields, &{&1.name, &1})
+      assert Map.has_key?(text_fields, :text)
+      assert Map.has_key?(text_fields, :sender)
+
+      image_fields = Map.new(image_variant.fields, &{&1.name, &1})
+      assert Map.has_key?(image_fields, :url)
+      assert Map.has_key?(image_fields, :width)
+      assert Map.has_key?(image_fields, :height)
+    end
+
+    test "uses first clause fields as primary" do
+      info = ViewExtractor.extract(TestAppWeb.MessageJSON)
+
+      field_names = Enum.map(info.fields, & &1.name)
+      assert :text in field_names
+      assert :sender in field_names
+      refute :url in field_names
+    end
+
+    test "preserves actions for polymorphic views" do
+      info = ViewExtractor.extract(TestAppWeb.MessageJSON)
+
+      assert info.actions[:index].list == true
+      assert info.actions[:show].list == false
+    end
+  end
 end
