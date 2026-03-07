@@ -7,6 +7,7 @@ defmodule PhoenixSpec.ViewExtractor do
   - Ecto schema pattern matches to resolve field types
   - Calls to other `*JSON.data/1` for nested schemas
   - Wrapping patterns like `%{data: ...}`
+  - Optional fields via `@optional` attribute or inline conditionals
   """
 
   alias PhoenixSpec.SchemaResolver
@@ -66,12 +67,12 @@ defmodule PhoenixSpec.ViewExtractor do
   end
 
   defp extract_from_ast(module, ast) do
-    # A source file may contain multiple defmodule blocks.
-    # Find the one matching our target module.
     module_ast = find_module_ast(ast, module)
-    aliases = collect_aliases(module_ast || ast)
-    functions = collect_functions(module_ast || ast)
-    {schema, fields} = extract_data_function(functions, aliases)
+    body = module_ast || ast
+    aliases = collect_aliases(body)
+    functions = collect_functions(body)
+    optional_fields = collect_optional_attr(body)
+    {schema, fields} = extract_data_function(functions, aliases, optional_fields)
     actions = extract_actions(functions)
 
     %ViewInfo{
@@ -115,6 +116,19 @@ defmodule PhoenixSpec.ViewExtractor do
     aliases
   end
 
+  defp collect_optional_attr(ast) do
+    {_, optional} =
+      Macro.prewalk(ast, MapSet.new(), fn
+        {:@, _, [{:optional, _, [fields]}]} = node, acc when is_list(fields) ->
+          {node, Enum.reduce(fields, acc, &MapSet.put(&2, &1))}
+
+        node, acc ->
+          {node, acc}
+      end)
+
+    optional
+  end
+
   defp collect_functions(ast) do
     {_, functions} =
       Macro.prewalk(ast, [], fn
@@ -132,7 +146,7 @@ defmodule PhoenixSpec.ViewExtractor do
   end
 
   @doc false
-  def extract_data_function(functions, aliases) do
+  def extract_data_function(functions, aliases, optional_fields \\ MapSet.new()) do
     data_fn =
       Enum.find(functions, fn
         {:defp, :data, _, _} -> true
@@ -143,7 +157,7 @@ defmodule PhoenixSpec.ViewExtractor do
     case data_fn do
       {_, :data, args, body} ->
         schema = extract_schema_from_args(args, aliases)
-        fields = extract_fields_from_body(body, schema, aliases)
+        fields = extract_fields_from_body(body, schema, aliases, optional_fields)
         {schema, fields}
 
       nil ->
@@ -173,48 +187,68 @@ defmodule PhoenixSpec.ViewExtractor do
 
   defp resolve_alias(_, _aliases), do: nil
 
-  defp extract_fields_from_body([do: body], schema, aliases) do
-    extract_fields_from_body(body, schema, aliases)
+  defp extract_fields_from_body([do: body], schema, aliases, optional) do
+    extract_fields_from_body(body, schema, aliases, optional)
   end
 
-  defp extract_fields_from_body({:%{}, _, pairs}, schema, aliases) do
+  defp extract_fields_from_body({:%{}, _, pairs}, schema, aliases, optional) do
     Enum.map(pairs, fn {key, value} ->
-      build_field(key, value, schema, aliases)
+      build_field(key, value, schema, aliases, optional)
     end)
   end
 
-  defp extract_fields_from_body({:__block__, _, exprs}, schema, aliases) do
+  defp extract_fields_from_body({:__block__, _, exprs}, schema, aliases, optional) do
     Enum.find_value(exprs, [], fn
       {:%{}, _, pairs} ->
-        Enum.map(pairs, fn {key, value} -> build_field(key, value, schema, aliases) end)
+        Enum.map(pairs, fn {key, value} -> build_field(key, value, schema, aliases, optional) end)
 
       _ ->
         nil
     end)
   end
 
-  defp extract_fields_from_body(_, _schema, _aliases), do: []
+  defp extract_fields_from_body(_, _schema, _aliases, _optional), do: []
 
-  defp build_field(key, value, schema, aliases) do
+  defp build_field(key, value, schema, aliases, optional) do
+    explicitly_optional = MapSet.member?(optional, key)
+    conditional = conditional_value?(value)
+
     case classify_value(value, schema, aliases) do
       {:schema_field, source_field, type} ->
-        %Field{name: key, source_field: source_field, type: type, schema: schema, required: true}
+        %Field{
+          name: key,
+          source_field: source_field,
+          type: type,
+          schema: schema,
+          required: not explicitly_optional and not conditional
+        }
 
       {:ref, ref_name} ->
-        %Field{name: key, ref: ref_name, required: true}
+        %Field{name: key, ref: ref_name, required: not explicitly_optional and not conditional}
 
       {:list_ref, ref_name} ->
         %Field{
           name: key,
           type: %{type: "array"},
           items_ref: ref_name,
-          required: true
+          required: not explicitly_optional and not conditional
         }
 
       :unknown ->
-        %Field{name: key, type: %{}, required: true}
+        %Field{
+          name: key,
+          type: %{},
+          required: not explicitly_optional and not conditional
+        }
     end
   end
+
+  # Detect `if(cond, do: val, else: nil)` or `if cond do val else nil end`
+  defp conditional_value?({:if, _, _}), do: true
+  defp conditional_value?({:unless, _, _}), do: true
+  defp conditional_value?({:case, _, _}), do: true
+  defp conditional_value?({:&&, _, _}), do: true
+  defp conditional_value?(_), do: false
 
   defp classify_value({{:., _, [Access, :get]}, _, _}, _schema, _aliases), do: :unknown
 
@@ -250,6 +284,15 @@ defmodule PhoenixSpec.ViewExtractor do
       _ ->
         :unknown
     end
+  end
+
+  # Unwrap conditionals to classify the inner value
+  defp classify_value({:if, _, [_cond, [do: inner, else: _]]}, schema, aliases) do
+    classify_value(inner, schema, aliases)
+  end
+
+  defp classify_value({:if, _, [_cond, [do: inner]]}, schema, aliases) do
+    classify_value(inner, schema, aliases)
   end
 
   defp classify_value(_, _schema, _aliases), do: :unknown
@@ -290,7 +333,7 @@ defmodule PhoenixSpec.ViewExtractor do
     end)
   end
 
-  defp analyze_action_body(do: body), do: analyze_action_body(body)
+  defp analyze_action_body([do: body]), do: analyze_action_body(body)
 
   defp analyze_action_body({:%{}, _, pairs}) do
     case pairs do

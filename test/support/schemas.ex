@@ -19,6 +19,8 @@ defmodule TestApp.Post do
     field :view_count, :integer
     field :published, :boolean
     field :published_at, :utc_datetime
+    field :status, Ecto.Enum, values: [:draft, :published, :archived]
+    field :tags, {:array, :string}
     belongs_to :author, TestApp.User
     has_many :comments, TestApp.Comment
     timestamps(type: :utc_datetime)

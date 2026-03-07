@@ -24,6 +24,28 @@ defmodule PhoenixSpec.ViewExtractorTest do
     assert field_map[:published_at].type == %{type: "string", format: "date-time"}
   end
 
+  test "extracts enum fields" do
+    info = ViewExtractor.extract(TestAppWeb.PostJSON)
+    field_map = Map.new(info.fields, &{&1.name, &1})
+
+    assert field_map[:status].type.type == "string"
+    assert "draft" in field_map[:status].type.enum
+  end
+
+  test "extracts array fields" do
+    info = ViewExtractor.extract(TestAppWeb.PostJSON)
+    field_map = Map.new(info.fields, &{&1.name, &1})
+
+    assert field_map[:tags].type == %{type: "array", items: %{type: "string"}}
+  end
+
+  test "computed fields get empty type" do
+    info = ViewExtractor.extract(TestAppWeb.PostJSON)
+    field_map = Map.new(info.fields, &{&1.name, &1})
+
+    assert field_map[:reading_time].type == %{}
+  end
+
   test "detects reference to nested view (author)" do
     info = ViewExtractor.extract(TestAppWeb.PostJSON)
 
@@ -54,6 +76,24 @@ defmodule PhoenixSpec.ViewExtractorTest do
     assert field_map[:id].type == %{type: "integer"}
     assert field_map[:name].type == %{type: "string"}
     assert field_map[:email].type == %{type: "string"}
+  end
+
+  test "detects @optional attribute fields" do
+    info = ViewExtractor.extract(TestAppWeb.UserDetailJSON)
+    field_map = Map.new(info.fields, &{&1.name, &1})
+
+    refute field_map[:age].required
+    refute field_map[:avatar_url].required
+    assert field_map[:id].required
+    assert field_map[:name].required
+  end
+
+  test "detects inline conditional as optional" do
+    info = ViewExtractor.extract(TestAppWeb.UserDetailJSON)
+    field_map = Map.new(info.fields, &{&1.name, &1})
+
+    # avatar_url uses `if(...)` — detected as conditional even without @optional
+    refute field_map[:avatar_url].required
   end
 
   test "derives schema name from view module" do

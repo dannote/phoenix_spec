@@ -39,6 +39,16 @@ defmodule PhoenixSpec.TypeMappingTest do
     assert TypeMapping.to_openapi(:map) == %{type: "object"}
   end
 
+  test "maps Ecto.Enum to string with enum values" do
+    enum_type = TestApp.Post.__schema__(:type, :status)
+
+    result = TypeMapping.to_openapi(enum_type)
+    assert result.type == "string"
+    assert "draft" in result.enum
+    assert "published" in result.enum
+    assert "archived" in result.enum
+  end
+
   test "unknown types return empty map" do
     assert TypeMapping.to_openapi(:unknown_type) == %{}
   end

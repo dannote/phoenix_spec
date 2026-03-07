@@ -41,7 +41,30 @@ defmodule TestAppWeb.PostJSON do
       view_count: post.view_count,
       published: post.published,
       published_at: post.published_at,
-      author: TestAppWeb.UserJSON.data(post.author)
+      status: post.status,
+      tags: post.tags,
+      author: TestAppWeb.UserJSON.data(post.author),
+      reading_time: div(String.length(post.body || ""), 200)
+    }
+  end
+end
+
+defmodule TestAppWeb.UserDetailJSON do
+  alias TestApp.User
+
+  @optional [:age, :avatar_url]
+
+  def show(%{user: user}) do
+    %{data: data(user)}
+  end
+
+  def data(%User{} = user) do
+    %{
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      age: user.age,
+      avatar_url: if(user.active, do: "/avatars/#{user.id}", else: nil)
     }
   end
 end
