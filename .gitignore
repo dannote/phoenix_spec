@@ -18,6 +18,7 @@ erl_crash.dump
 
 # Ignore package tarball (built via "mix hex.build").
 phoenix_spec-*.tar
+phoenix_spec-*/
 
 # Temporary files, for example, from tests.
 /tmp/

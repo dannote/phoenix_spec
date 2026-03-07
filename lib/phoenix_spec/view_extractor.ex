@@ -51,7 +51,7 @@ defmodule PhoenixSpec.ViewExtractor do
   @doc """
   Extracts view information from a JSON view module's source file.
   """
-  @spec extract(module()) :: ViewInfo.t() | nil
+  @spec extract(module()) :: struct() | nil
   def extract(module) do
     case AstHelpers.parse_module_source(module) do
       {:ok, _module, ast} -> extract_from_ast(module, ast)

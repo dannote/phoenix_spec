@@ -27,7 +27,7 @@ defmodule PhoenixSpec.ParamsExtractor do
   Extracts parameter info from a controller module's source.
   Returns a map of action names to their `ParamsInfo`.
   """
-  @spec extract(module()) :: %{atom() => ParamsInfo.t()}
+  @spec extract(module()) :: %{atom() => struct()}
   def extract(controller) do
     case AstHelpers.parse_module_source(controller) do
       {:ok, _module, ast} -> extract_from_ast(controller, ast)
