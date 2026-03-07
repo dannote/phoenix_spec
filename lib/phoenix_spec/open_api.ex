@@ -144,8 +144,7 @@ defmodule PhoenixSpec.OpenAPI do
   end
 
   defp json_route?(%{plug: plug}) do
-    module_name = Atom.to_string(plug)
-    String.contains?(module_name, "Controller")
+    plug |> Atom.to_string() |> String.ends_with?("Controller")
   end
 
   defp build_operations(routes, view_map, params_map, status_map) do

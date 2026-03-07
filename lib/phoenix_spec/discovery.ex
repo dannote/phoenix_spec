@@ -11,8 +11,13 @@ defmodule PhoenixSpec.Discovery do
     router.__routes__()
     |> Enum.map(& &1.plug)
     |> Enum.uniq()
+    |> Enum.filter(&controller?/1)
     |> Enum.flat_map(&controller_json_views/1)
     |> Enum.uniq()
+  end
+
+  defp controller?(module) do
+    module |> Atom.to_string() |> String.ends_with?("Controller")
   end
 
   @doc """
