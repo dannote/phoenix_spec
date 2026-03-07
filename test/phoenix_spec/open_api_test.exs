@@ -138,6 +138,55 @@ defmodule PhoenixSpec.OpenAPITest do
     assert user_detail.properties[:avatar_url] == %{type: "string"}
   end
 
+  test "operations have summary", %{spec: spec} do
+    assert spec.paths["/api/posts"]["get"].summary == "List posts"
+    assert spec.paths["/api/posts"]["post"].summary == "Create post"
+    assert spec.paths["/api/posts/{id}"]["get"].summary == "Get post"
+    assert spec.paths["/api/posts/{id}"]["put"].summary == "Update post"
+    assert spec.paths["/api/posts/{id}"]["delete"].summary == "Delete post"
+  end
+
+  test "patch and put for same action have unique operationIds", %{spec: spec} do
+    put_id = spec.paths["/api/posts/{id}"]["put"].operationId
+    patch_id = spec.paths["/api/posts/{id}"]["patch"].operationId
+
+    assert put_id != patch_id
+    assert put_id == "post_update_put"
+    assert patch_id == "post_update_patch"
+  end
+
+  test "create responds with 422 error schema", %{spec: spec} do
+    post_op = spec.paths["/api/posts"]["post"]
+    assert Map.has_key?(post_op.responses, "422")
+    assert post_op.responses["422"].description == "Unprocessable Entity"
+
+    error_schema = post_op.responses["422"].content["application/json"].schema
+    assert error_schema.properties.errors == %{type: "object"}
+  end
+
+  test "show responds with 404", %{spec: spec} do
+    get_op = spec.paths["/api/posts/{id}"]["get"]
+    assert Map.has_key?(get_op.responses, "404")
+    assert get_op.responses["404"].description == "Not Found"
+  end
+
+  test "delete responds with 404", %{spec: spec} do
+    delete_op = spec.paths["/api/posts/{id}"]["delete"]
+    assert Map.has_key?(delete_op.responses, "404")
+  end
+
+  test "update responds with 422 and 404", %{spec: spec} do
+    put_op = spec.paths["/api/posts/{id}"]["put"]
+    assert Map.has_key?(put_op.responses, "422")
+    assert Map.has_key?(put_op.responses, "404")
+  end
+
+  test "index does not have error responses", %{spec: spec} do
+    get_op = spec.paths["/api/posts"]["get"]
+    refute Map.has_key?(get_op.responses, "404")
+    refute Map.has_key?(get_op.responses, "422")
+  end
+
   test "serializes to valid JSON", %{spec: spec} do
     json = OpenAPI.to_json(spec)
     assert {:ok, decoded} = Jason.decode(json)

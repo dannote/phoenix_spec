@@ -149,14 +149,26 @@ defmodule PhoenixSpec.OpenAPI do
   end
 
   defp build_operations(routes, view_map, params_map, status_map) do
+    action_verbs = count_action_verbs(routes)
+
     Map.new(routes, fn route ->
       verb = route_verb(route)
-      operation = build_operation(route, view_map, params_map, status_map)
+      needs_verb_suffix = Map.get(action_verbs, route.plug_opts, 1) > 1
+
+      operation =
+        build_operation(route, verb, needs_verb_suffix, view_map, params_map, status_map)
+
       {verb, operation}
     end)
   end
 
-  defp build_operation(route, view_map, params_map, status_map) do
+  defp count_action_verbs(routes) do
+    Enum.reduce(routes, %{}, fn route, acc ->
+      Map.update(acc, route.plug_opts, 1, &(&1 + 1))
+    end)
+  end
+
+  defp build_operation(route, verb, needs_verb_suffix, view_map, params_map, status_map) do
     action = route.plug_opts
     controller = route.plug
     json_view = controller_to_json_view(controller)
@@ -164,7 +176,8 @@ defmodule PhoenixSpec.OpenAPI do
     status = get_in(status_map, [controller, action])
 
     operation = %{
-      operationId: operation_id(controller, action),
+      operationId: operation_id(controller, action, verb, needs_verb_suffix),
+      summary: operation_summary(controller, action),
       responses: build_responses(action, view_info, status)
     }
 
@@ -212,24 +225,53 @@ defmodule PhoenixSpec.OpenAPI do
 
   defp build_responses(action, nil, status) do
     code = to_string(status || default_status(action))
+
     %{code => %{description: status_description(code), content: default_content()}}
+    |> Map.merge(error_responses(action))
   end
 
   defp build_responses(action, %ViewInfo{actions: actions, module: module}, status) do
     detected_status = status || default_status(action)
 
-    case {detected_status, Map.get(actions, action)} do
-      {204, _} ->
-        %{"204" => %{description: "No Content"}}
+    success =
+      case {detected_status, Map.get(actions, action)} do
+        {204, _} ->
+          %{"204" => %{description: "No Content"}}
 
-      {_, %{wrapper_key: wrapper_key, list: list}} ->
-        code = to_string(detected_status)
-        schema = build_response_schema(module, wrapper_key, list)
-        %{code => %{description: status_description(code), content: json_content(schema)}}
+        {_, %{wrapper_key: wrapper_key, list: list}} ->
+          code = to_string(detected_status)
+          schema = build_response_schema(module, wrapper_key, list)
+          %{code => %{description: status_description(code), content: json_content(schema)}}
 
-      {_, nil} ->
-        code = to_string(detected_status)
-        %{code => %{description: status_description(code), content: default_content()}}
+        {_, nil} ->
+          code = to_string(detected_status)
+          %{code => %{description: status_description(code), content: default_content()}}
+      end
+
+    Map.merge(success, error_responses(action))
+  end
+
+  defp error_responses(action) do
+    errors = %{}
+
+    errors =
+      if action in [:show, :update, :delete] do
+        Map.put(errors, "404", %{description: "Not Found"})
+      else
+        errors
+      end
+
+    if action in [:create, :update] do
+      Map.put(errors, "422", %{
+        description: "Unprocessable Entity",
+        content:
+          json_content(%{
+            type: "object",
+            properties: %{errors: %{type: "object"}}
+          })
+      })
+    else
+      errors
     end
   end
 
@@ -288,14 +330,47 @@ defmodule PhoenixSpec.OpenAPI do
   defp route_verb(%{verb: verb}) when is_atom(verb), do: verb |> Atom.to_string()
   defp route_verb(%{verb: verb}) when is_binary(verb), do: String.downcase(verb)
 
-  defp operation_id(controller, action) do
+  defp operation_id(controller, action, verb, needs_verb_suffix) do
     controller_name =
       controller
       |> Module.split()
       |> List.last()
       |> String.replace_suffix("Controller", "")
 
-    "#{Macro.underscore(controller_name)}_#{action}"
+    base = "#{Macro.underscore(controller_name)}_#{action}"
+    if needs_verb_suffix, do: "#{base}_#{verb}", else: base
+  end
+
+  defp operation_summary(controller, action) do
+    resource =
+      controller
+      |> Module.split()
+      |> List.last()
+      |> String.replace_suffix("Controller", "")
+      |> Macro.underscore()
+
+    case action do
+      :index -> "List #{pluralize(resource)}"
+      :show -> "Get #{resource}"
+      :create -> "Create #{resource}"
+      :update -> "Update #{resource}"
+      :delete -> "Delete #{resource}"
+      other -> "#{other} #{resource}"
+    end
+  end
+
+  defp pluralize(word) do
+    cond do
+      String.ends_with?(word, "y") and
+          not String.ends_with?(word, ~w(ay ey iy oy uy)) ->
+        String.slice(word, 0..-2//1) <> "ies"
+
+      String.ends_with?(word, ~w(s x z ch sh)) ->
+        word <> "es"
+
+      true ->
+        word <> "s"
+    end
   end
 
   defp drop_nils(map) when is_map(map) do
