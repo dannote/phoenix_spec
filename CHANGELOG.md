@@ -2,6 +2,29 @@
 
 ## Unreleased
 
+## 0.1.1 - 2026-07-28
+
+### Breaking changes
+
+- Raised the minimum supported Elixir version from 1.17 to 1.19.
+
+### Added
+
+- Support JSON responses defined directly in Phoenix controllers, including OpenAPI schemas and TypeScript interfaces.
+- Infer OpenAPI types for literal response values and fields guarded by `&&` or `unless`.
+
+### Fixed
+
+- Generate valid YAML for nested objects, arrays, and polymorphic schemas.
+- Preserve flat request parameter shapes and detect qualified `Ecto.Changeset.cast/3` calls.
+- Quote response property names that are not valid TypeScript identifiers.
+- Regenerate compiler output when routers, schemas, project configuration, or other source files change.
+- Recover from invalid compiler manifests without unsafe term decoding.
+
+## 0.1.0 - 2026-03-07
+
+### Added
+
 - Ecto schema type inference (all types including Enum, arrays, embeds)
 - JSON view AST extraction (field detection, nested views, `$ref` generation)
 - Router introspection (paths, verbs, path parameters)
