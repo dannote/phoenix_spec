@@ -37,6 +37,7 @@ defmodule TestAppWeb.PostJSON do
     %{
       id: post.id,
       title: post.title,
+      "display-title": post.title,
       body: post.body,
       view_count: post.view_count,
       published: post.published,
@@ -68,6 +69,7 @@ defmodule TestAppWeb.UserDetailJSON do
       name: user.name,
       email: user.email,
       age: user.age,
+      active_age: user.active && user.age,
       address: user.address,
       social_links: user.social_links,
       avatar_url: if(user.active, do: "/avatars/#{user.id}", else: nil),

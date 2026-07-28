@@ -44,7 +44,9 @@ defmodule PhoenixSpec.OutputTest do
 
     yaml = PhoenixSpec.OpenAPI.to_yaml(spec)
     decoded = YamlElixir.read_from_string!(yaml)
+    json_decoded = spec |> PhoenixSpec.OpenAPI.to_json() |> Jason.decode!()
 
+    assert decoded == json_decoded
     assert decoded["openapi"] == "3.1.0"
     assert decoded["info"]["title"] == "TestApp API"
     assert [_, _] = decoded["components"]["schemas"]["Message"]["oneOf"]

@@ -30,6 +30,12 @@ defmodule PhoenixSpec.TypeScriptTest do
     assert ts =~ "email: string;"
   end
 
+  test "generates interfaces for controllers that render JSON inline", %{ts: ts} do
+    assert ts =~ "export interface InlinePost {"
+    assert ts =~ "id: number;"
+    assert ts =~ "title: string;"
+  end
+
   test "generates Comment interface", %{ts: ts} do
     assert ts =~ "export interface Comment {"
     assert ts =~ "id: number;"
@@ -58,7 +64,12 @@ defmodule PhoenixSpec.TypeScriptTest do
 
   test "optional fields use ? syntax", %{ts: ts} do
     assert ts =~ "age?: number;"
+    assert ts =~ "active_age?: number;"
     assert ts =~ "avatar_url?: string;"
+  end
+
+  test "quotes property names that are not TypeScript identifiers", %{ts: ts} do
+    assert ts =~ ~s/"display-title": string;/
   end
 
   test "polymorphic views generate union type", %{ts: ts} do

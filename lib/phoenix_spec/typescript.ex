@@ -59,7 +59,7 @@ defmodule PhoenixSpec.TypeScript do
     ts_type = field_to_ts_type(field)
     optional = if field.required, do: "", else: "?"
 
-    "  #{field.name}#{optional}: #{ts_type};"
+    "  #{property_name(field.name)}#{optional}: #{ts_type};"
   end
 
   defp field_to_ts_type(%Field{ref: ref}) when is_binary(ref), do: ref
@@ -87,6 +87,16 @@ defmodule PhoenixSpec.TypeScript do
   end
 
   defp field_to_ts_type(%Field{}), do: "unknown"
+
+  defp property_name(name) do
+    name = to_string(name)
+
+    if Regex.match?(~r/^[A-Za-z_$][A-Za-z0-9_$]*$/, name) do
+      name
+    else
+      inspect(name)
+    end
+  end
 
   defp embedded_to_ts(schema) do
     fields = schema.__schema__(:fields) -- [:id]

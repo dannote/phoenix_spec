@@ -54,6 +54,17 @@ defmodule PhoenixSpec.OpenAPITest do
     assert Map.has_key?(spec.paths, "/api/posts/{id}")
     assert Map.has_key?(spec.paths, "/api/users")
     assert Map.has_key?(spec.paths, "/api/users/{id}")
+    assert Map.has_key?(spec.paths, "/api/inline-posts/{id}")
+  end
+
+  test "generates schemas and responses for inline JSON controllers", %{spec: spec} do
+    schema = spec.components.schemas["InlinePost"]
+    assert schema.properties.id == %{type: "integer"}
+    assert schema.properties.title == %{type: "string"}
+
+    operation = spec.paths["/api/inline-posts/{id}"]["get"]
+    response_schema = operation.responses["200"].content["application/json"].schema
+    assert response_schema.properties.data == %{"$ref": "#/components/schemas/InlinePost"}
   end
 
   test "index paths have GET with array response", %{spec: spec} do

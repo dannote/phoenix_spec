@@ -28,6 +28,12 @@ defmodule PhoenixSpec.ParamsExtractorTest do
     assert inner[:published] == %{type: "boolean"}
   end
 
+  test "does not treat flat parameter maps as wrapper keys" do
+    params = ParamsExtractor.extract(TestAppWeb.FlatParamsController)
+
+    assert Enum.map(params.create.fields, & &1.name) == [:title, :body]
+  end
+
   test "update action wraps changeset fields" do
     params = ParamsExtractor.extract(TestAppWeb.PostController)
 

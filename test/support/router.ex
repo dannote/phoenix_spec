@@ -27,6 +27,28 @@ defmodule TestAppWeb.PostController do
   end
 end
 
+defmodule TestAppWeb.FlatParamsController do
+  alias TestApp.Post
+
+  def create(conn, %{"title" => title, "body" => body}) do
+    Ecto.Changeset.cast(%Post{}, %{title: title, body: body}, [:title, :body])
+    conn
+  end
+end
+
+defmodule TestAppWeb.InlinePostController do
+  alias TestApp.Post
+
+  def init(opts), do: opts
+  def call(conn, _opts), do: conn
+
+  def show(conn, %{"id" => _id}) do
+    post = %Post{}
+    body = %{id: post.id, title: post.title}
+    Phoenix.Controller.json(conn, data: body)
+  end
+end
+
 defmodule TestAppWeb.UserController do
   def init(opts), do: opts
   def call(conn, _opts), do: conn
@@ -58,6 +80,7 @@ defmodule TestAppWeb.Router do
     pipe_through :api
 
     resources "/posts", PostController, only: [:index, :show, :create, :update, :delete]
+    get "/inline-posts/:id", InlinePostController, :show
     resources "/users", UserController, only: [:index, :show]
 
     resources "/posts/:post_id/comments", CommentController, only: [:index, :show]

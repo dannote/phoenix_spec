@@ -182,7 +182,7 @@ defmodule PhoenixSpec.OpenAPI do
   defp build_operation(route, verb, needs_verb_suffix, view_map, params_map, status_map) do
     action = route.plug_opts
     controller = route.plug
-    json_view = Discovery.controller_to_json_view(controller)
+    json_view = Discovery.controller_to_json_view(controller) || controller
     view_info = Map.get(view_map, json_view)
     status = get_in(status_map, [controller, action])
 

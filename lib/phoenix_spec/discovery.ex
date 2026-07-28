@@ -1,10 +1,15 @@
 defmodule PhoenixSpec.Discovery do
   @moduledoc """
-  Discovers JSON view modules and their associated controllers in a Phoenix application.
+  Discovers response modules associated with controllers in a Phoenix application.
   """
 
+  alias PhoenixSpec.AstHelpers
+
   @doc """
-  Finds all `*JSON` view modules that are referenced by the given router's controllers.
+  Finds response modules for the given router's controllers.
+
+  Phoenix `*JSON` modules are preferred. A controller is returned as its own
+  response module when it renders JSON inline.
   """
   @spec json_views_from_router(module()) :: [module()]
   def json_views_from_router(router) do
@@ -41,8 +46,27 @@ defmodule PhoenixSpec.Discovery do
 
   defp controller_json_views(controller) do
     case controller_to_json_view(controller) do
-      nil -> []
+      nil -> if inline_json_controller?(controller), do: [controller], else: []
       module -> [module]
+    end
+  end
+
+  defp inline_json_controller?(controller) do
+    case AstHelpers.parse_module_source(controller) do
+      {:ok, _module, ast} ->
+        body = AstHelpers.find_module_ast(ast, controller) || ast
+
+        {_, found?} =
+          Macro.prewalk(body, false, fn
+            {:json, _, _arguments} = node, _found? -> {node, true}
+            {{:., _, [_module, :json]}, _, _arguments} = node, _found? -> {node, true}
+            node, found? -> {node, found?}
+          end)
+
+        found?
+
+      :error ->
+        false
     end
   end
 end

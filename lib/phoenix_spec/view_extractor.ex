@@ -209,64 +209,138 @@ defmodule PhoenixSpec.ViewExtractor do
   end
 
   defp extract_from_named_function(functions, aliases, optional_fields, spec_types) do
-    extraction_fn =
-      functions
-      |> Enum.find(fn
-        {:defp, name, _, _} when name not in [:data] ->
-          true
+    Enum.find_value(functions, fn
+      {:defp, name, args, body} when name != :data ->
+        extract_function_fields(args, body, aliases, optional_fields, spec_types)
 
-        _ ->
-          false
-      end)
-
-    case extraction_fn do
-      {_, _name, args, body} ->
-        schema =
-          extract_schema_from_args(args, aliases) || infer_schema_from_aliases(aliases)
-
-        fields = extract_fields_from_body(body, schema, aliases, optional_fields, spec_types)
-
-        if fields != [] do
-          {schema, fields}
-        end
-
-      nil ->
+      _function ->
         nil
-    end
+    end)
   end
 
   defp extract_from_action_inline(functions, aliases, optional_fields, spec_types) do
-    action_fn =
-      Enum.find(functions, fn
-        {:def, name, _, _} when name in [:show, :create] -> true
-        _ -> false
-      end)
+    Enum.find_value(functions, fn function ->
+      extract_inline_action_fields(function, aliases, optional_fields, spec_types)
+    end)
+  end
 
-    with {:def, _, _, body} <- action_fn,
-         {:%{}, _, pairs} <- unwrap_action_to_inner_map(body) do
-      schema = infer_schema_from_aliases(aliases)
+  defp extract_inline_action_fields(
+         {:def, name, args, body},
+         aliases,
+         optional_fields,
+         spec_types
+       )
+       when name in [:index, :show, :create, :update, :delete] do
+    with {:%{}, _, [_ | _] = pairs} <- unwrap_action_to_inner_map(body) do
+      schema =
+        extract_schema_from_args(args, aliases) ||
+          extract_schema_from_body(body, aliases) ||
+          infer_schema_from_aliases(aliases)
 
       fields =
         Enum.map(pairs, fn {key, value} ->
           build_field(key, value, schema, aliases, optional_fields, spec_types)
         end)
 
-      if fields != [], do: {schema, fields}
-    else
-      _ -> nil
+      {schema, fields}
     end
   end
 
-  defp unwrap_action_to_inner_map(do: body), do: unwrap_action_to_inner_map(body)
+  defp extract_inline_action_fields(_function, _aliases, _optional_fields, _spec_types), do: nil
 
-  defp unwrap_action_to_inner_map({:%{}, _, [{_wrapper_key, inner}]}) do
-    case inner do
+  defp extract_function_fields(args, body, aliases, optional_fields, spec_types) do
+    schema =
+      extract_schema_from_args(args, aliases) ||
+        extract_schema_from_body(body, aliases) ||
+        infer_schema_from_aliases(aliases)
+
+    fields = extract_fields_from_body(body, schema, aliases, optional_fields, spec_types)
+    if fields != [], do: {schema, fields}
+  end
+
+  defp extract_schema_from_body(body, aliases) do
+    {_, schema} =
+      Macro.prewalk(body, nil, fn
+        {:%, _, [schema_alias, _fields]} = node, nil ->
+          {node, resolve_alias(schema_alias, aliases)}
+
+        node, schema ->
+          {node, schema}
+      end)
+
+    schema
+  end
+
+  defp unwrap_action_to_inner_map(body) do
+    case response_payload(body) do
+      {:%{}, _, [{_wrapper_key, {:%{}, _, _pairs} = inner}]} -> inner
       {:%{}, _, _pairs} = map -> map
-      _ -> nil
+      _other -> nil
     end
   end
 
-  defp unwrap_action_to_inner_map(_), do: nil
+  defp response_payload(expression), do: response_payload(expression, %{})
+
+  defp response_payload([do: body], bindings), do: response_payload(body, bindings)
+
+  defp response_payload({:__block__, _, expressions}, bindings) do
+    {bindings, last_expression} =
+      Enum.reduce(expressions, {bindings, nil}, fn
+        {:=, _, [{name, _, context}, value]} = expression, {bindings, _last}
+        when is_atom(name) and is_atom(context) ->
+          {Map.put(bindings, name, resolve_binding(value, bindings)), expression}
+
+        expression, {bindings, _last} ->
+          {bindings, expression}
+      end)
+
+    response_payload(last_expression, bindings)
+  end
+
+  defp response_payload({:%{}, meta, pairs}, bindings) do
+    resolved_pairs =
+      Enum.map(pairs, fn {key, value} -> {key, resolve_binding(value, bindings)} end)
+
+    {:%{}, meta, resolved_pairs}
+  end
+
+  defp response_payload({:json, _, arguments}, bindings) do
+    arguments |> List.last() |> response_payload(bindings)
+  end
+
+  defp response_payload({{:., _, [_module, :json]}, _, arguments}, bindings) do
+    arguments |> List.last() |> response_payload(bindings)
+  end
+
+  defp response_payload({:|>, _, [_value, call]}, bindings),
+    do: response_payload(call, bindings)
+
+  defp response_payload([{key, value}], bindings) when is_atom(key) do
+    {:%{}, [], [{key, resolve_binding(value, bindings)}]}
+  end
+
+  defp response_payload({name, _, context}, bindings) when is_atom(name) and is_atom(context) do
+    case Map.fetch(bindings, name) do
+      {:ok, value} -> response_payload(value, bindings)
+      :error -> nil
+    end
+  end
+
+  defp response_payload(_expression, _bindings), do: nil
+
+  defp resolve_binding({name, _, context} = variable, bindings)
+       when is_atom(name) and is_atom(context) do
+    Map.get(bindings, name, variable)
+  end
+
+  defp resolve_binding({:%{}, meta, pairs}, bindings) do
+    resolved_pairs =
+      Enum.map(pairs, fn {key, value} -> {key, resolve_binding(value, bindings)} end)
+
+    {:%{}, meta, resolved_pairs}
+  end
+
+  defp resolve_binding(expression, _bindings), do: expression
 
   defp infer_schema_from_aliases(aliases) do
     ecto_schemas =
@@ -351,6 +425,9 @@ defmodule PhoenixSpec.ViewExtractor do
         type = %{type: "object", properties: properties}
         %Field{name: key, type: type, required: required}
 
+      {:type, type} ->
+        %Field{name: key, type: type, required: required}
+
       :unknown ->
         type = resolve_spec_type(key, spec_types)
         %Field{name: key, type: type, required: required}
@@ -418,12 +495,18 @@ defmodule PhoenixSpec.ViewExtractor do
     end
   end
 
-  # Unwrap conditionals to classify the inner value
-  defp classify_value({:if, _, [_cond, [do: inner, else: _]]}, schema, aliases) do
+  # Unwrap conditionals to classify the value they may return.
+  defp classify_value({kind, _, [_condition, [do: inner, else: _]]}, schema, aliases)
+       when kind in [:if, :unless] do
     classify_value(inner, schema, aliases)
   end
 
-  defp classify_value({:if, _, [_cond, [do: inner]]}, schema, aliases) do
+  defp classify_value({kind, _, [_condition, [do: inner]]}, schema, aliases)
+       when kind in [:if, :unless] do
+    classify_value(inner, schema, aliases)
+  end
+
+  defp classify_value({:&&, _, [_condition, inner]}, schema, aliases) do
     classify_value(inner, schema, aliases)
   end
 
@@ -442,6 +525,18 @@ defmodule PhoenixSpec.ViewExtractor do
 
     {:inline_object, properties}
   end
+
+  defp classify_value(value, _schema, _aliases) when is_binary(value),
+    do: {:type, %{type: "string"}}
+
+  defp classify_value(value, _schema, _aliases) when is_integer(value),
+    do: {:type, %{type: "integer"}}
+
+  defp classify_value(value, _schema, _aliases) when is_float(value),
+    do: {:type, %{type: "number", format: "double"}}
+
+  defp classify_value(value, _schema, _aliases) when is_boolean(value),
+    do: {:type, %{type: "boolean"}}
 
   defp classify_value(_, _schema, _aliases), do: :unknown
 
@@ -492,19 +587,15 @@ defmodule PhoenixSpec.ViewExtractor do
     end)
   end
 
-  defp analyze_action_body(do: body), do: analyze_action_body(body)
-
-  defp analyze_action_body({:%{}, _, pairs}) do
-    case pairs do
-      [{wrapper_key, inner}] ->
+  defp analyze_action_body(body) do
+    case response_payload(body) do
+      {:%{}, _, [{wrapper_key, inner}]} ->
         %ActionInfo{wrapper_key: wrapper_key, list: list_expression?(inner)}
 
-      _ ->
+      _payload ->
         %ActionInfo{}
     end
   end
-
-  defp analyze_action_body(_), do: %ActionInfo{}
 
   defp list_expression?({:for, _, _}), do: true
 
@@ -531,6 +622,7 @@ defmodule PhoenixSpec.ViewExtractor do
     |> remove_web_prefix()
     |> Enum.join(".")
     |> String.replace_suffix("JSON", "")
+    |> String.replace_suffix("Controller", "")
   end
 
   defp remove_web_prefix([first | rest]) do

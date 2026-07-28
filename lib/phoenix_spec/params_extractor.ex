@@ -123,6 +123,12 @@ defmodule PhoenixSpec.ParamsExtractor do
         {:cast, _, [_struct, _params, fields]} = node, {schema, _} when is_list(fields) ->
           {node, {schema, extract_atom_fields(fields)}}
 
+        # Qualified direct call: Ecto.Changeset.cast(struct, params, fields)
+        {{:., _, [{:__aliases__, _, _}, :cast]}, _, [_struct, _params, fields]} = node,
+        {schema, _}
+        when is_list(fields) ->
+          {node, {schema, extract_atom_fields(fields)}}
+
         # Piped: struct |> Ecto.Changeset.cast(params, fields)
         {{:., _, [{:__aliases__, _, _}, :cast]}, _, [_params, fields]} = node, {schema, _}
         when is_list(fields) ->
@@ -200,10 +206,12 @@ defmodule PhoenixSpec.ParamsExtractor do
   end
 
   defp find_wrapper_key(param_keys) do
-    Enum.find_value(param_keys, fn
-      %{name: name} when is_binary(name) and name not in ["id"] -> name
-      _ -> nil
-    end)
+    case Enum.uniq_by(param_keys, & &1.name) do
+      [%{name: name}] when is_binary(name) and name != "id" -> name
+      [%{name: "id"}, %{name: name}] when is_binary(name) -> name
+      [%{name: name}, %{name: "id"}] when is_binary(name) -> name
+      _params -> nil
+    end
   end
 
   defp wrap_fields(wrapper, fields) do

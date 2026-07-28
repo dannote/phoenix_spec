@@ -114,12 +114,13 @@ defmodule PhoenixSpec.ViewExtractorTest do
     assert field_map[:name].required
   end
 
-  test "detects inline conditional as optional" do
+  test "detects inline conditionals as typed optional fields" do
     info = ViewExtractor.extract(TestAppWeb.UserDetailJSON)
     field_map = Map.new(info.fields, &{&1.name, &1})
 
-    # avatar_url uses `if(...)` — detected as conditional even without @optional
     refute field_map[:avatar_url].required
+    refute field_map[:active_age].required
+    assert field_map[:active_age].type == %{type: "integer"}
   end
 
   test "derives schema name from view module" do
@@ -156,6 +157,22 @@ defmodule PhoenixSpec.ViewExtractorTest do
     assert field_map[:published].type == %{type: "boolean"}
   end
 
+  test "extracts fields from controllers that call json/2 directly" do
+    info = ViewExtractor.extract(TestAppWeb.InlinePostController)
+
+    assert info.schema == TestApp.Post
+    assert info.actions.show.wrapper_key == :data
+
+    field_map = Map.new(info.fields, &{&1.name, &1})
+    assert field_map[:id].type == %{type: "integer"}
+    assert field_map[:title].type == %{type: "string"}
+  end
+
+  test "derives schema names from inline JSON controllers" do
+    assert ViewExtractor.view_module_to_schema_name(TestAppWeb.InlinePostController) ==
+             "InlinePost"
+  end
+
   test "detects inline map literals as object type" do
     info = ViewExtractor.extract(TestAppWeb.PostMetaJSON)
 
@@ -185,6 +202,7 @@ defmodule PhoenixSpec.ViewExtractorTest do
 
       text_fields = Map.new(text_variant.fields, &{&1.name, &1})
       assert Map.has_key?(text_fields, :text)
+      assert text_fields.type.type == %{type: "string"}
       assert Map.has_key?(text_fields, :sender)
 
       image_fields = Map.new(image_variant.fields, &{&1.name, &1})
