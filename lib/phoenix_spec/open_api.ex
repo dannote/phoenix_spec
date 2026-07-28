@@ -14,7 +14,7 @@ defmodule PhoenixSpec.OpenAPI do
     router = Keyword.fetch!(opts, :router)
     title = Keyword.get(opts, :title, "API")
     version = Keyword.get(opts, :version, "1.0.0")
-    description = Keyword.get(opts, :description, nil)
+    description = opts[:description]
 
     json_views = Discovery.json_views_from_router(router)
     view_infos = Enum.map(json_views, &ViewExtractor.extract/1) |> Enum.reject(&is_nil/1)
@@ -119,6 +119,7 @@ defmodule PhoenixSpec.OpenAPI do
 
   defp extract_controllers(router) do
     router.__routes__()
+    |> Enum.filter(&json_route?/1)
     |> Enum.map(& &1.plug)
     |> Enum.uniq()
   end
@@ -154,9 +155,11 @@ defmodule PhoenixSpec.OpenAPI do
     end)
   end
 
-  defp json_route?(%{plug: plug}) do
+  defp json_route?(%{plug: plug}) when is_atom(plug) do
     plug |> Atom.to_string() |> String.ends_with?("Controller")
   end
+
+  defp json_route?(_route), do: false
 
   defp build_operations(routes, view_map, params_map, status_map) do
     action_verbs = count_action_verbs(routes)
@@ -173,15 +176,13 @@ defmodule PhoenixSpec.OpenAPI do
   end
 
   defp count_action_verbs(routes) do
-    Enum.reduce(routes, %{}, fn route, acc ->
-      Map.update(acc, route.plug_opts, 1, &(&1 + 1))
-    end)
+    Enum.frequencies_by(routes, & &1.plug_opts)
   end
 
   defp build_operation(route, verb, needs_verb_suffix, view_map, params_map, status_map) do
     action = route.plug_opts
     controller = route.plug
-    json_view = controller_to_json_view(controller)
+    json_view = Discovery.controller_to_json_view(controller)
     view_info = Map.get(view_map, json_view)
     status = get_in(status_map, [controller, action])
 
@@ -212,15 +213,12 @@ defmodule PhoenixSpec.OpenAPI do
   defp build_request_body(params_info) do
     properties =
       Map.new(params_info.fields, fn field ->
-        name = if is_atom(field.name), do: field.name, else: String.to_atom(field.name)
-        {name, field.type}
+        {field.name, field.type}
       end)
 
     required =
       params_info.fields
-      |> Enum.map(fn field ->
-        if is_atom(field.name), do: field.name, else: String.to_atom(field.name)
-      end)
+      |> Enum.map(& &1.name)
       |> Enum.sort()
 
     schema = %{type: "object", properties: properties, required: required}
@@ -328,15 +326,6 @@ defmodule PhoenixSpec.OpenAPI do
     Regex.replace(~r/:([a-zA-Z_]+)/, path, "{\\1}")
   end
 
-  defp controller_to_json_view(controller) do
-    controller
-    |> Atom.to_string()
-    |> String.replace("Controller", "JSON")
-    |> String.to_existing_atom()
-  rescue
-    ArgumentError -> nil
-  end
-
   defp route_verb(%{verb: verb}) when is_atom(verb), do: verb |> Atom.to_string()
   defp route_verb(%{verb: verb}) when is_binary(verb), do: String.downcase(verb)
 
@@ -385,8 +374,8 @@ defmodule PhoenixSpec.OpenAPI do
 
   defp drop_nils(map) when is_map(map) do
     map
-    |> Enum.reject(fn {_k, v} -> is_nil(v) end)
-    |> Enum.into(%{})
+    |> Enum.reject(fn {_key, value} -> is_nil(value) end)
+    |> Map.new()
   end
 
   @doc """
@@ -402,36 +391,6 @@ defmodule PhoenixSpec.OpenAPI do
   """
   @spec to_yaml(map()) :: String.t()
   def to_yaml(spec) do
-    spec |> Jason.encode!() |> Jason.decode!() |> yaml_encode()
+    Ymlr.document!(spec, sort_maps: true)
   end
-
-  defp yaml_encode(data), do: to_yaml_str(data, 0)
-
-  defp to_yaml_str(map, indent) when is_map(map) do
-    map
-    |> Enum.map_join("\n", fn {key, value} ->
-      prefix = String.duplicate("  ", indent)
-
-      case value do
-        v when is_map(v) and map_size(v) > 0 ->
-          "#{prefix}#{key}:\n#{to_yaml_str(v, indent + 1)}"
-
-        v when is_list(v) ->
-          items = Enum.map_join(v, "\n", &"#{prefix}  - #{to_yaml_inline(&1)}")
-          "#{prefix}#{key}:\n#{items}"
-
-        _ ->
-          "#{prefix}#{key}: #{to_yaml_value(value)}"
-      end
-    end)
-  end
-
-  defp to_yaml_value(nil), do: "null"
-  defp to_yaml_value(true), do: "true"
-  defp to_yaml_value(false), do: "false"
-  defp to_yaml_value(v) when is_binary(v), do: inspect(v)
-  defp to_yaml_value(v), do: "#{v}"
-
-  defp to_yaml_inline(v) when is_binary(v), do: inspect(v)
-  defp to_yaml_inline(v), do: "#{v}"
 end

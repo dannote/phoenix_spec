@@ -177,7 +177,6 @@ defmodule PhoenixSpec.ViewExtractorTest do
     test "detects multiple data/1 clauses as variants" do
       info = ViewExtractor.extract(TestAppWeb.MessageJSON)
 
-      assert length(info.variants) == 2
       assert info.schema == TestApp.TextMessage
 
       [text_variant, image_variant] = info.variants

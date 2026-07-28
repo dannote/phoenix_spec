@@ -52,6 +52,15 @@ defmodule PhoenixSpec.CompilerTest do
     assert {:noop, []} = Compiler.run([])
   end
 
+  test "regenerates when the manifest is invalid", %{output: output} do
+    [manifest] = Compiler.manifests()
+    File.mkdir_p!(Path.dirname(manifest))
+    File.write!(manifest, :erlang.term_to_binary(:invalid))
+
+    assert {:ok, []} = Compiler.run([])
+    assert File.exists?(output)
+  end
+
   test "supports multiple outputs" do
     ts_output = Path.join(System.tmp_dir!(), "phoenix_spec_test_#{:rand.uniform(100_000)}.d.ts")
 

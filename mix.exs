@@ -8,7 +8,7 @@ defmodule PhoenixSpec.MixProject do
     [
       app: :phoenix_spec,
       version: @version,
-      elixir: "~> 1.17",
+      elixir: "~> 1.19",
       start_permanent: Mix.env() == :prod,
       deps: deps(),
       package: package(),
@@ -22,7 +22,7 @@ defmodule PhoenixSpec.MixProject do
       aliases: aliases(),
       dialyzer: [
         plt_file: {:no_warn, "_build/dev/dialyxir_plt.plt"},
-        plt_add_apps: [:mix]
+        plt_add_apps: [:mix, :ex_unit]
       ]
     ]
   end
@@ -44,12 +44,15 @@ defmodule PhoenixSpec.MixProject do
     [
       {:phoenix, "~> 1.7", optional: true},
       {:ecto, "~> 3.10", optional: true},
-      {:jason, "~> 1.0"},
-      {:yaml_elixir, "~> 2.9", optional: true},
-      {:ex_doc, "~> 0.30", only: :dev, runtime: false},
-      {:ex_dna, "~> 1.1", only: [:dev, :test], runtime: false},
-      {:ex_slop, "~> 0.1", only: [:dev, :test], runtime: false},
-      {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false}
+      {:jason, "~> 1.4"},
+      {:ymlr, "~> 5.1"},
+      {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
+      {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false},
+      {:ex_dna, "~> 1.5", only: [:dev, :test], runtime: false},
+      {:ex_doc, "~> 0.34", only: :dev, runtime: false},
+      {:ex_slop, "~> 0.4", only: [:dev, :test], runtime: false},
+      {:reach, "~> 2.6", only: [:dev, :test], runtime: false},
+      {:yaml_elixir, "~> 2.12", only: :test}
     ]
   end
 
@@ -69,7 +72,8 @@ defmodule PhoenixSpec.MixProject do
         "test",
         "credo --strict",
         "dialyzer",
-        "ex_dna"
+        "ex_dna --max-clones 0",
+        "reach.check --arch --smells"
       ]
     ]
   end

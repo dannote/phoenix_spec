@@ -71,8 +71,6 @@ defmodule PhoenixSpec.OpenAPITest do
     get_op = spec.paths["/api/posts/{id}"]["get"]
 
     assert get_op.operationId == "post_show"
-    assert length(get_op.parameters) == 1
-
     [param] = get_op.parameters
     assert param.name == "id"
     assert param.in == "path"
@@ -89,7 +87,7 @@ defmodule PhoenixSpec.OpenAPITest do
     schema = request_body.content["application/json"].schema
     assert schema.type == "object"
 
-    post_wrapper = schema.properties[:post]
+    post_wrapper = schema.properties["post"]
     assert post_wrapper.type == "object"
     assert post_wrapper.properties[:title] == %{type: "string"}
     assert post_wrapper.properties[:published] == %{type: "boolean"}
@@ -194,8 +192,6 @@ defmodule PhoenixSpec.OpenAPITest do
     message = spec.components.schemas["Message"]
 
     assert Map.has_key?(message, :oneOf)
-    assert length(message.oneOf) == 2
-
     [text_schema, image_schema] = message.oneOf
     assert text_schema.type == "object"
     assert Map.has_key?(text_schema.properties, :text)

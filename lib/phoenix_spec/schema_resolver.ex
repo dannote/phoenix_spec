@@ -26,8 +26,6 @@ defmodule PhoenixSpec.SchemaResolver do
   @spec association(module(), atom()) :: map() | nil
   def association(schema, field) do
     schema.__schema__(:association, field)
-  rescue
-    _ -> nil
   end
 
   @doc """

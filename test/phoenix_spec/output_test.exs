@@ -33,4 +33,20 @@ defmodule PhoenixSpec.OutputTest do
 
     assert String.length(json) > 100
   end
+
+  test "full YAML output is valid and complete" do
+    spec =
+      PhoenixSpec.OpenAPI.generate(
+        router: TestAppWeb.Router,
+        title: "TestApp API",
+        version: "0.1.0"
+      )
+
+    yaml = PhoenixSpec.OpenAPI.to_yaml(spec)
+    decoded = YamlElixir.read_from_string!(yaml)
+
+    assert decoded["openapi"] == "3.1.0"
+    assert decoded["info"]["title"] == "TestApp API"
+    assert [_, _] = decoded["components"]["schemas"]["Message"]["oneOf"]
+  end
 end

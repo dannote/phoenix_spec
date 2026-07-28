@@ -30,7 +30,7 @@ defmodule PhoenixSpec.Discovery do
     json_module =
       controller
       |> Atom.to_string()
-      |> String.replace("Controller", "JSON")
+      |> String.replace_suffix("Controller", "JSON")
 
     module = String.to_existing_atom(json_module)
 

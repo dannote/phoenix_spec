@@ -18,6 +18,8 @@ defmodule Mix.Tasks.PhoenixSpec.Gen do
 
   use Mix.Task
 
+  alias PhoenixSpec.Output
+
   @shortdoc "Generates OpenAPI spec from Phoenix JSON views"
 
   @switches [
@@ -37,8 +39,8 @@ defmodule Mix.Tasks.PhoenixSpec.Gen do
 
     router = resolve_router(opts)
     format = Keyword.get(opts, :format, "json")
-    output = Keyword.get(opts, :output, default_output(format))
-    title = Keyword.get(opts, :title, default_title())
+    output = Keyword.get(opts, :output, Output.default_path(format))
+    title = Keyword.get_lazy(opts, :title, &Output.default_title/0)
     version = Keyword.get(opts, :version, "1.0.0")
 
     case format do
@@ -98,14 +100,6 @@ defmodule Mix.Tasks.PhoenixSpec.Gen do
       """)
     end
   end
-
-  defp default_title do
-    Mix.Project.config()[:app] |> Atom.to_string() |> Macro.camelize()
-  end
-
-  defp default_output("yaml"), do: "priv/static/openapi.yaml"
-  defp default_output("ts"), do: "priv/static/api.d.ts"
-  defp default_output(_), do: "priv/static/openapi.json"
 
   defp encode(spec, "yaml"), do: PhoenixSpec.OpenAPI.to_yaml(spec)
   defp encode(spec, _json), do: PhoenixSpec.OpenAPI.to_json(spec)

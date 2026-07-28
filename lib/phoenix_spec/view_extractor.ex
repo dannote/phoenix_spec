@@ -27,6 +27,17 @@ defmodule PhoenixSpec.ViewExtractor do
           }
   end
 
+  defmodule ActionInfo do
+    @moduledoc false
+    defstruct wrapper_key: nil, list: false, ref: nil
+
+    @type t :: %__MODULE__{
+            wrapper_key: atom() | nil,
+            list: boolean(),
+            ref: String.t() | nil
+          }
+  end
+
   defmodule ViewInfo do
     @moduledoc false
     defstruct [:module, :schema, :fields, :actions, variants: []]
@@ -37,14 +48,8 @@ defmodule PhoenixSpec.ViewExtractor do
             module: module(),
             schema: module() | nil,
             fields: [Field.t()],
-            actions: %{atom() => action_info()},
+            actions: %{atom() => ActionInfo.t()},
             variants: [variant()]
-          }
-
-    @type action_info :: %{
-            wrapper_key: atom() | nil,
-            list: boolean(),
-            ref: String.t() | nil
           }
   end
 
@@ -169,17 +174,29 @@ defmodule PhoenixSpec.ViewExtractor do
       end)
       |> Enum.reject(fn {_schema, fields} -> fields == [] end)
 
-    schemas = Enum.map(clause_data, fn {schema, _} -> schema end) |> Enum.uniq()
-
-    if length(schemas) > 1 and Enum.all?(schemas, &(&1 != nil)) do
-      {first_schema, first_fields} = hd(clause_data)
-      variants = Enum.map(clause_data, fn {s, f} -> %{schema: s, fields: f} end)
-      {{first_schema, first_fields}, variants}
-    else
-      {first_schema, first_fields} = hd(clause_data)
-      {{first_schema, first_fields}, []}
-    end
+    build_polymorphic_result(clause_data)
   end
+
+  defp build_polymorphic_result([]), do: {{nil, []}, []}
+
+  defp build_polymorphic_result([{first_schema, first_fields} | _] = clause_data) do
+    schemas = clause_data |> Enum.map(&elem(&1, 0)) |> Enum.uniq()
+
+    variants =
+      if polymorphic_schemas?(schemas) do
+        Enum.map(clause_data, fn {schema, fields} -> %{schema: schema, fields: fields} end)
+      else
+        []
+      end
+
+    {{first_schema, first_fields}, variants}
+  end
+
+  defp polymorphic_schemas?([first, second | rest]) do
+    not is_nil(first) and not is_nil(second) and Enum.all?(rest, &(!is_nil(&1)))
+  end
+
+  defp polymorphic_schemas?(_schemas), do: false
 
   defp extract_from_alternative_function(functions, aliases, optional_fields, spec_types) do
     result =
@@ -480,18 +497,14 @@ defmodule PhoenixSpec.ViewExtractor do
   defp analyze_action_body({:%{}, _, pairs}) do
     case pairs do
       [{wrapper_key, inner}] ->
-        %{
-          wrapper_key: wrapper_key,
-          list: list_expression?(inner),
-          ref: nil
-        }
+        %ActionInfo{wrapper_key: wrapper_key, list: list_expression?(inner)}
 
       _ ->
-        %{wrapper_key: nil, list: false, ref: nil}
+        %ActionInfo{}
     end
   end
 
-  defp analyze_action_body(_), do: %{wrapper_key: nil, list: false, ref: nil}
+  defp analyze_action_body(_), do: %ActionInfo{}
 
   defp list_expression?({:for, _, _}), do: true
 

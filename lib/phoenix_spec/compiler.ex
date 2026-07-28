@@ -37,6 +37,8 @@ defmodule PhoenixSpec.Compiler do
 
   use Mix.Task.Compiler
 
+  alias PhoenixSpec.Output
+
   @manifest_path "phoenix_spec.manifest"
 
   @impl true
@@ -68,7 +70,7 @@ defmodule PhoenixSpec.Compiler do
   end
 
   defp regenerate(config, router) do
-    title = Keyword.get(config, :title, default_title())
+    title = Keyword.get_lazy(config, :title, &Output.default_title/0)
     version = Keyword.get(config, :version, "1.0.0")
     outputs = resolve_outputs(config)
 
@@ -102,7 +104,7 @@ defmodule PhoenixSpec.Compiler do
         format = Keyword.get(config, :format, "json")
 
         output =
-          Keyword.get(config, :output, default_output(format))
+          Keyword.get(config, :output, Output.default_path(format))
 
         [{output, format}]
 
@@ -112,25 +114,18 @@ defmodule PhoenixSpec.Compiler do
   end
 
   defp source_files(config) do
-    router = Keyword.get(config, :router)
+    source_paths =
+      Keyword.get_lazy(config, :source_paths, fn ->
+        Mix.Project.config()
+        |> Keyword.get(:elixirc_paths, ["lib"])
+      end)
 
-    if router && Code.ensure_loaded?(router) do
-      controllers = router.__routes__() |> Enum.map(& &1.plug) |> Enum.uniq()
-      view_modules = PhoenixSpec.Discovery.json_views_from_router(router)
-
-      (controllers ++ view_modules)
-      |> Enum.flat_map(&module_source_path/1)
-      |> Enum.uniq()
-    else
-      []
-    end
-  end
-
-  defp module_source_path(mod) do
-    case mod.module_info(:compile)[:source] do
-      nil -> []
-      source -> [List.to_string(source)]
-    end
+    source_paths
+    |> Enum.flat_map(&Path.wildcard(Path.join(&1, "**/*.{ex,exs}")))
+    |> Kernel.++(Path.wildcard("config/**/*.{ex,exs}"))
+    |> Kernel.++(["mix.exs"])
+    |> Enum.filter(&File.regular?/1)
+    |> Enum.uniq()
   end
 
   defp hash_files(files) do
@@ -156,27 +151,18 @@ defmodule PhoenixSpec.Compiler do
   end
 
   defp read_manifest do
-    case File.read(manifest_path()) do
-      {:ok, content} ->
-        content |> :erlang.binary_to_term()
-
-      _ ->
-        %{}
+    with {:ok, content} <- File.read(manifest_path()),
+         manifest when is_map(manifest) <- :erlang.binary_to_term(content, [:safe]) do
+      manifest
+    else
+      _error -> %{}
     end
   rescue
-    _ -> %{}
+    ArgumentError -> %{}
   end
 
   defp write_manifest(data) do
     File.mkdir_p!(Mix.Project.manifest_path())
     File.write!(manifest_path(), :erlang.term_to_binary(data))
   end
-
-  defp default_title do
-    Mix.Project.config()[:app] |> Atom.to_string() |> Macro.camelize()
-  end
-
-  defp default_output("yaml"), do: "priv/static/openapi.yaml"
-  defp default_output("ts"), do: "priv/static/api.d.ts"
-  defp default_output(_), do: "priv/static/openapi.json"
 end
