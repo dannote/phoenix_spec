@@ -6,7 +6,7 @@
 
 ### Breaking changes
 
-- Raised the minimum supported Elixir version from 1.17 to 1.19.
+- Raised the minimum supported Elixir version from 1.17 to 1.18.
 
 ### Added
 

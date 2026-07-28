@@ -8,7 +8,7 @@ defmodule PhoenixSpec.MixProject do
     [
       app: :phoenix_spec,
       version: @version,
-      elixir: "~> 1.19",
+      elixir: "~> 1.18",
       start_permanent: Mix.env() == :prod,
       deps: deps(),
       package: package(),
@@ -48,6 +48,7 @@ defmodule PhoenixSpec.MixProject do
       {:ymlr, "~> 5.1"},
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
       {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false},
+      {:ex_ast, "== 0.12.0", only: [:dev, :test], runtime: false, override: true},
       {:ex_dna, "~> 1.5", only: [:dev, :test], runtime: false},
       {:ex_doc, "~> 0.34", only: :dev, runtime: false},
       {:ex_slop, "~> 0.4", only: [:dev, :test], runtime: false},
