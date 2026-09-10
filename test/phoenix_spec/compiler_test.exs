@@ -12,6 +12,7 @@ defmodule PhoenixSpec.CompilerTest do
         output: output,
         format: "json",
         title: "Test API",
+        description: "Test API documentation",
         version: "1.0.0"
       ]
     )
@@ -25,6 +26,7 @@ defmodule PhoenixSpec.CompilerTest do
       Application.delete_env(:phoenix_spec, :output)
       Application.delete_env(:phoenix_spec, :format)
       Application.delete_env(:phoenix_spec, :title)
+      Application.delete_env(:phoenix_spec, :description)
       Application.delete_env(:phoenix_spec, :version)
     end)
 
@@ -38,6 +40,7 @@ defmodule PhoenixSpec.CompilerTest do
     spec = output |> File.read!() |> Jason.decode!()
     assert spec["openapi"] == "3.1.0"
     assert spec["info"]["title"] == "Test API"
+    assert spec["info"]["description"] == "Test API documentation"
   end
 
   test "second run returns :noop when nothing changed", %{output: output} do

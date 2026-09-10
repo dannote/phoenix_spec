@@ -22,6 +22,7 @@ defmodule PhoenixSpec.Compiler do
         output: "priv/static/openapi.json",
         format: "json",
         title: "My API",
+        description: "My API documentation",
         version: "1.0.0"
 
   Or with multiple outputs:
@@ -75,7 +76,14 @@ defmodule PhoenixSpec.Compiler do
     outputs = resolve_outputs(config)
 
     Enum.each(outputs, fn {output, format} ->
-      content = generate_content(format, router: router, title: title, version: version)
+      content =
+        generate_content(format,
+          router: router,
+          title: title,
+          version: version,
+          description: config[:description]
+        )
+
       write_output(output, content)
     end)
 

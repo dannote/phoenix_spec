@@ -10,11 +10,11 @@ defmodule PhoenixSpec.ViewExtractor do
   - Optional fields via `@optional` attribute or inline conditionals
   """
 
-  alias PhoenixSpec.{AstHelpers, SchemaResolver}
+  alias PhoenixSpec.{AstHelpers, Metadata, SchemaResolver}
 
   defmodule Field do
     @moduledoc false
-    defstruct [:name, :source_field, :type, :schema, :ref, :required, :items_ref]
+    defstruct [:name, :source_field, :type, :schema, :ref, :required, :items_ref, metadata: %{}]
 
     @type t :: %__MODULE__{
             name: atom(),
@@ -23,7 +23,8 @@ defmodule PhoenixSpec.ViewExtractor do
             schema: module() | nil,
             ref: String.t() | nil,
             required: boolean(),
-            items_ref: String.t() | nil
+            items_ref: String.t() | nil,
+            metadata: map()
           }
   end
 
@@ -40,7 +41,7 @@ defmodule PhoenixSpec.ViewExtractor do
 
   defmodule ViewInfo do
     @moduledoc false
-    defstruct [:module, :schema, :fields, :actions, variants: []]
+    defstruct [:module, :schema, :fields, :actions, variants: [], metadata: %{}]
 
     @type variant :: %{schema: module() | nil, fields: [Field.t()]}
 
@@ -49,7 +50,8 @@ defmodule PhoenixSpec.ViewExtractor do
             schema: module() | nil,
             fields: [Field.t()],
             actions: %{atom() => ActionInfo.t()},
-            variants: [variant()]
+            variants: [variant()],
+            metadata: map()
           }
   end
 
@@ -75,14 +77,28 @@ defmodule PhoenixSpec.ViewExtractor do
     {{schema, fields}, variants} =
       extract_data_function(functions, aliases, optional_fields, spec_types)
 
+    field_metadata =
+      body
+      |> Metadata.collect(:field_metadata)
+      |> Map.new(fn {name, value} ->
+        {name, value |> Metadata.keyword_map!() |> Metadata.validate!()}
+      end)
+
+    annotate = fn fields ->
+      Enum.map(fields, fn field ->
+        %{field | metadata: Map.get(field_metadata, field.name, %{})}
+      end)
+    end
+
     actions = extract_actions(functions)
 
     %ViewInfo{
       module: module,
       schema: schema,
-      fields: fields,
+      fields: annotate.(fields),
       actions: actions,
-      variants: variants
+      variants: Enum.map(variants, &%{&1 | fields: annotate.(&1.fields)}),
+      metadata: body |> Metadata.collect(:schema_metadata) |> Metadata.validate!()
     }
   end
 

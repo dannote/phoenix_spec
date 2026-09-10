@@ -11,6 +11,7 @@ defmodule Mix.Tasks.PhoenixSpec.Gen do
     * `--router` - Router module (default: auto-detected `*Web.Router`)
     * `--output` - Output file path (default: `priv/static/openapi.json`)
     * `--title` - API title (default: app name)
+    * `--description` - API description
     * `--version` - API version (default: `"1.0.0"`)
     * `--format` - Output format: `json`, `yaml`, or `ts` (default: `json`)
 
@@ -26,6 +27,7 @@ defmodule Mix.Tasks.PhoenixSpec.Gen do
     router: :string,
     output: :string,
     title: :string,
+    description: :string,
     version: :string,
     format: :string
   ]
@@ -61,7 +63,8 @@ defmodule Mix.Tasks.PhoenixSpec.Gen do
           PhoenixSpec.OpenAPI.generate(
             router: router,
             title: title,
-            version: version
+            version: version,
+            description: opts[:description]
           )
 
         content = encode(spec, format)

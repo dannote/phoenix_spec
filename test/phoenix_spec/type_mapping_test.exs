@@ -36,7 +36,7 @@ defmodule PhoenixSpec.TypeMappingTest do
              additionalProperties: %{type: "string"}
            }
 
-    assert TypeMapping.to_openapi(:map) == %{type: "object"}
+    assert TypeMapping.to_openapi(:map) == %{type: "object", additionalProperties: true}
   end
 
   test "maps Ecto.Enum to string with enum values" do

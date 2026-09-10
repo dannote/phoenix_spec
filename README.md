@@ -130,7 +130,8 @@ PhoenixSpec generates:
 | `:time` | `string` (format: time) |
 | `:utc_datetime` / `:naive_datetime` | `string` (format: date-time) |
 | `:utc_datetime_usec` / `:naive_datetime_usec` | `string` (format: date-time) |
-| `:map` | `object` |
+| `:map` | `object` with `additionalProperties: true` |
+| `{:map, :string}` | `object` with string-valued additional properties |
 | `:binary` | `string` (format: binary) |
 | `{:array, :string}` | `array` of `string` |
 | `Ecto.Enum` | `string` with `enum` values |
@@ -178,6 +179,50 @@ end
 ```
 
 Any Ecto type works: `:string`, `:integer`, `:boolean`, `:float`, `{:array, :string}`, etc.
+
+## Schema and Field Metadata
+
+Add documentation and object constraints without duplicating inferred types:
+
+```elixir
+defmodule MyAppWeb.PostJSON do
+  @schema_metadata description: "A blog post",
+                   examples: [%{id: 1, title: "Hello world"}],
+                   additionalProperties: false
+
+  @field_metadata title: [description: "Public title", examples: ["Hello world"]],
+                  metadata: [additionalProperties: %{type: "string"}]
+
+  # Existing data/1 and action functions stay unchanged.
+end
+```
+
+Both attributes accept keyword lists with `description` (string), `examples`
+(list of JSON values), and `additionalProperties` (boolean or schema map).
+Use literal values, lists, and maps; expressions and function calls are not
+executed and raise an error. Unsupported metadata keys also raise an error.
+If Elixir warns that an attribute is unused, register it before assigning it:
+`Module.register_attribute(__MODULE__, :field_metadata, persist: true)`
+(and likewise for `:schema_metadata`).
+
+Field keys refer to the **output names** in the JSON view. Metadata augments
+inferred types, references, arrays, and embedded objects without changing which
+fields are required. It applies across all `data/1` clauses; for polymorphic
+schemas, schema-level `additionalProperties` is applied to each `oneOf` variant.
+Descriptions and examples remain on the enclosing schema. Nested object constraints
+can be expressed with a schema map in `additionalProperties`.
+
+Plain Ecto `:map` fields explicitly allow additional properties. Other generated
+objects remain open by default (omitting `additionalProperties` also permits extra
+keys). Set `additionalProperties: false` explicitly to close an object; use this
+on object schemas, not array or scalar fields. For a referenced object, put the
+constraint on the referenced view's `@schema_metadata`: `additionalProperties`
+does not recognize properties declared through a sibling `$ref`.
+
+Schema `examples` uses the OpenAPI 3.1 JSON Schema array form, not named media-type
+examples. These annotations describe response schemas; controller/action-level
+parameter, request, and response metadata is not yet supported. Documentation
+metadata does not change TypeScript output.
 
 ## Embedded Schemas
 
@@ -378,6 +423,7 @@ config :phoenix_spec,
   output: "priv/static/openapi.json",
   format: "json",
   title: "My API",
+  description: "Public API documentation",
   version: "1.0.0"
 ```
 
@@ -408,6 +454,7 @@ mix phoenix_spec.gen \
 | `--router` | Auto-detected | Router module |
 | `--output` | `priv/static/openapi.json` | Output file path |
 | `--title` | App name | API title in the spec |
+| `--description` | Omitted | API description (`info.description`) |
 | `--version` | `1.0.0` | API version |
 | `--format` | `json` | `json`, `yaml`, or `ts` |
 

@@ -18,7 +18,7 @@ defmodule PhoenixSpec.TypeMapping do
   def to_openapi(:utc_datetime_usec), do: %{type: "string", format: "date-time"}
   def to_openapi(:naive_datetime), do: %{type: "string", format: "date-time"}
   def to_openapi(:naive_datetime_usec), do: %{type: "string", format: "date-time"}
-  def to_openapi(:map), do: %{type: "object"}
+  def to_openapi(:map), do: %{type: "object", additionalProperties: true}
   def to_openapi({:map, inner}), do: %{type: "object", additionalProperties: to_openapi(inner)}
   def to_openapi({:array, inner}), do: %{type: "array", items: to_openapi(inner)}
 

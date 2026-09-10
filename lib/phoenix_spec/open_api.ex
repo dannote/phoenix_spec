@@ -45,17 +45,29 @@ defmodule PhoenixSpec.OpenAPI do
 
       schema =
         if info.variants != [] do
-          variants_to_one_of(info.variants)
+          variants_to_one_of(info.variants, info.metadata)
         else
-          fields_to_schema(info.fields)
+          Map.merge(fields_to_schema(info.fields), info.metadata)
         end
 
       {name, schema}
     end)
   end
 
-  defp variants_to_one_of(variants) do
-    %{oneOf: Enum.map(variants, fn %{fields: fields} -> fields_to_schema(fields) end)}
+  defp variants_to_one_of(variants, metadata) do
+    object_metadata = Map.take(metadata, [:additionalProperties])
+
+    %{
+      oneOf:
+        Enum.map(variants, fn %{fields: fields} ->
+          Map.merge(fields_to_schema(fields), object_metadata)
+        end)
+    }
+    |> Map.merge(Map.delete(metadata, :additionalProperties))
+  end
+
+  defp field_to_property(%Field{} = field) do
+    Map.merge(field_schema(field), field.metadata)
   end
 
   defp fields_to_schema(fields) do
@@ -79,27 +91,29 @@ defmodule PhoenixSpec.OpenAPI do
     end
   end
 
-  defp field_to_property(%Field{ref: ref}) when is_binary(ref) do
+  defp field_schema(%Field{ref: ref}) when is_binary(ref) do
     %{"$ref": "#/components/schemas/#{ref}"}
   end
 
-  defp field_to_property(%Field{items_ref: items_ref}) when is_binary(items_ref) do
+  defp field_schema(%Field{items_ref: items_ref})
+       when is_binary(items_ref) do
     %{type: "array", items: %{"$ref": "#/components/schemas/#{items_ref}"}}
   end
 
-  defp field_to_property(%Field{type: %{type: "embedded", cardinality: :one, schema: schema}}) do
+  defp field_schema(%Field{type: %{type: "embedded", cardinality: :one, schema: schema}}) do
     embedded_schema_to_openapi(schema)
   end
 
-  defp field_to_property(%Field{type: %{type: "embedded", cardinality: :many, schema: schema}}) do
+  defp field_schema(%Field{type: %{type: "embedded", cardinality: :many, schema: schema}}) do
     %{type: "array", items: embedded_schema_to_openapi(schema)}
   end
 
-  defp field_to_property(%Field{type: type}) when is_map(type) and map_size(type) > 0 do
+  defp field_schema(%Field{type: type})
+       when is_map(type) and map_size(type) > 0 do
     type
   end
 
-  defp field_to_property(%Field{}) do
+  defp field_schema(%Field{}) do
     %{}
   end
 
