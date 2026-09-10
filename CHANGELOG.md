@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+## 0.2.0 - 2026-09-10
+
+### Added
+
+- Support `@field_metadata` and `@schema_metadata` annotations for descriptions, examples, and `additionalProperties`. ([#2](https://github.com/dannote/phoenix_spec/issues/2))
+- Accept API descriptions through `--description` and the Mix compiler's `description` configuration.
+
+### Changed
+
+- Emit explicit `additionalProperties: true` for plain Ecto `:map` fields.
+
 ## 0.1.1 - 2026-07-28
 
 ### Breaking changes

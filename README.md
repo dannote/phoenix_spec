@@ -28,7 +28,7 @@ Add to your `mix.exs`:
 ```elixir
 def deps do
   [
-    {:phoenix_spec, "~> 0.1", only: :dev, runtime: false}
+    {:phoenix_spec, "~> 0.2", only: :dev, runtime: false}
   ]
 end
 ```
